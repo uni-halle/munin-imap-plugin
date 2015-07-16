@@ -117,7 +117,7 @@ def iterMailboxNames(conn) :
         yield mbName, markers
         continue
 
-def printCapabilities(capabilities) :
+def printCapabilities(conn, capabilities) :
     """
     What capabilities does the IMAP server support?
     On http://www.iana.org/assignments/imap-capabilities/imap-capabilities.xhtml
@@ -181,6 +181,26 @@ def printCapabilities(capabilities) :
         UTF8=USER    (OBSOLETE) [RFC5738][RFC6855]
         WITHIN                  [RFC5032]
 
+    Other important RFCs are::
+
+        RFC2060  INTERNET MESSAGE ACCESS PROTOCOL - VERSION 4rev1
+            obsoletes RFC1730
+
+        RFC3501  INTERNET MESSAGE ACCESS PROTOCOL - VERSION 4rev1
+            obsoletes RFC2060
+            updated by RFC4466 Collected Extensions to IMAP4 ABNF
+            updated by RFC4469 Internet Message Access Protocol (IMAP) CATENATE Extension
+            updated by RFC4551 IMAP Extension for Conditional STORE Operation
+                               or Quick Flag Changes Resynchronization
+            updated by RFC5032 WITHIN Search Extension to the IMAP Protocol
+            updated by RFC5182 IMAP Extension for Referencing the Last SEARCH Result
+            updated by RFC5738 IMAP Support for UTF-8
+            updated by RFC6186 Use of SRV Records for Locating Email Submission/Access Services
+            updated by RFC6858 Simplified POP and IMAP Downgrading for Internationalized Email
+
+        RFC2222 Simple Authentication and Security Layer (SASL)
+
+
 
     @param capabilites: contains the CAPABILITIES of the IMAP server
     @type  capabilites: tuple of str
@@ -192,10 +212,15 @@ def printCapabilities(capabilities) :
     # if the server does support the specific capabilities.
     capabilitiesOfInterest = set(capabilities)
     capabilitiesOfInterest.add('ACL') # e.g. Cyrus Server
+    capabilitiesOfInterest.add('ANNOTATIONS') # non-standard, but supported by Cyrus Server
     capabilitiesOfInterest.add('CHILDREN') # /Noinferiors
     capabilitiesOfInterest.add('QUOTA')
     capabilitiesOfInterest.add('AUTH=CRAM-MD5')
     capabilitiesOfInterest.add('NAMESPACE')
+
+    # Novel Groupwiese
+    # https://www.novell.com/documentation/groupwise_sdk/gwsdk_gwimap/data/al7te9j.html
+    capabilitiesOfInterest.add('XGWEXTENSIONS')
     
     print
     print "  %-20s | supported " % ("Capabilities",)
@@ -204,6 +229,12 @@ def printCapabilities(capabilities) :
     for capName in sorted(capabilitiesOfInterest) :
         supported = capName in capabilities
         print "  %-20s | %s" % (capName, "%s" % ('SUPPORTED' if supported else 'NO'))
+
+#    for xcapName in sorted(capabilitiesOfInterest) :
+#        if xcapName.startswith('X') :
+#            print
+#            print xcapName
+#            print conn.xatom(xcapName)
 
 
 def printMailboxesWithItemCount(conn) :
@@ -276,7 +307,7 @@ def main():
     print "  Connect:  %(connectdelay).2fms" % locals()
     print "  Login:    %(logindelay).2fms" % locals()
         
-    printCapabilities(capabilities)
+    printCapabilities(M, capabilities)
 
     printMailboxesWithItemCount(M)
     
