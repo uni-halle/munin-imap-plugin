@@ -15,11 +15,12 @@
 # This file is distributed without any warranty; without even the implied
 # warranty of merchantability or fitness for a particular purpose.
 # See "LICENSE.GPL" in the source distribution for more information.
-# 
+#
 
 #---
 #--- Python
-import getopt
+import getopt # until Python 2.6 use 'optparse' instead, from Python 2.7 on usae 'argparse' instead
+import optparse # von Python 2.3 bis Python 2.6 (danach deprecated)
 import imaplib
 import os
 import sys
@@ -30,11 +31,11 @@ import time
 
 #: The plugin was able to check the service and it appeared to be
 #: functioning properly
-NAGIOS_RC_OK = 0 
+NAGIOS_RC_OK = 0
 
 #: The plugin was able to check the service, but it appeared to be above
 #: some "warning" threshold or did not appear to be working properly
-NAGIOS_RC_WARNING = 1 
+NAGIOS_RC_WARNING = 1
 
 #: The plugin detected that either the service was not running or it was
 #: above some "critical" threshold
@@ -51,19 +52,36 @@ NAGIOS_RC_UNKNOWN = 3
 #---
 #--- Munin Constants (http://munin-monitoring.org/wiki/HowToWritePlugins)
 
+FLAG_PRINT_CAPABILITIES = False # or True
+FLAG_PRINT_MAILBOXES = False # or True
+FLAG_VERBOSE_FOR_HUMANS = False # or True
+FLAG_MAP_NAGIOS_RETURN_CODES_TO_ZERO = True # or False
+FLAG_IS_MUNIN_PLUGIN = True # False currently not supported
+
+
+MONITOR_GRAPH_TITLE = "Load average"
+MONITOR_GRAPH_LABEL = "load"
+MONITOR_MEASURED_VARIABLE = "load"
 
 #---
 class CLI(object) :
 
     _SINGLETON_INSTANCE = None #: Singleton Pattern
-    
+
     def __init__(self) :
-        self.opts = None
-        self.args = None
+        self._options = None
+        self._args = None
         self.user = None
         self.host = None
         self.password = None
         self.use_ssl = None
+        self._printCapabilities = FLAG_PRINT_CAPABILITIES
+        self._printMailboxes = FLAG_PRINT_MAILBOXES
+        self._verboseForHumans = FLAG_VERBOSE_FOR_HUMANS
+        self._mapNagiosReturnCodesToZero = FLAG_MAP_NAGIOS_RETURN_CODES_TO_ZERO
+
+    def IsConfigMode(self) :
+        return 'config' in self._args
 
     def GetUser(self) :
         return self.user
@@ -76,13 +94,35 @@ class CLI(object) :
 
     def ShouldUseSSL(self) :
         return self.use_ssl
-    
+
+    def ShouldPrintCapabilities(self) :
+        return self._printCapabilities
+
+    def ShouldPrintMailboxes(self) :
+        return self._printMailboxes
+
+    def IsVerboseForHumans(self) :
+        return self._verboseForHumans
+
+    def MapNagiosReturnCode(self, nagiosReturnCode) :
+        """
+        @param nagiosReturnCode: Following values are specified
+            - 0 = OK
+            - 1 = WARNING
+            - 2 = CRITICAL
+            - 3 = UNKNOWN
+        @type  nagiosReturnCode: int
+        """
+        if self._mapNagiosReturnCodesToZero :
+            return 0
+        return nagiosReturnCode
+
     @classmethod
     def GetInstance(cls) :
         if cls._SINGLETON_INSTANCE is None :
             cls._SINGLETON_INSTANCE = cls()
         return cls._SINGLETON_INSTANCE
-    
+
     def usage(self):
         print "-u <user>"
         print "-p <password>"
@@ -90,21 +130,47 @@ class CLI(object) :
         print "-H <host>"
 
     def evaluate(self) :
-        self.opts, self.args = getopt.getopt(sys.argv[1:], "u:p:sH:")
-        for o, a in self.opts:
-            if o == "-u":
-                self.user = a
-            elif o == "-p":
-                self.password = a
-            elif o == "-s":
-                self.use_ssl = True
-            elif o == "-H":
-                self.host = a
-               
-    
+        parser = optparse.OptionParser()
+        parser.add_option("-u", "--user",
+                          dest = "user",
+                          help = "login as USER",
+                          action = "store",
+                          type = "string",
+                          metavar = "USER")
+
+        parser.add_option("-p", "--password",
+                          dest = "password",
+                          help = "login with PASSWORD",
+                          action = "store",
+                          type = "string",
+                          metavar = "PASSWORD")
+
+        parser.add_option("-H", "--host",
+                          dest = "host",
+                          help = "login on HOST",
+                          action = "store",
+                          type = "string",
+                          metavar = "HOST")
+
+        parser.add_option("-s", "--secure",
+                          dest = "use_ssl",
+                          help = "secure connection with SSL/TLS",
+                          action = "store_true")
+
+        (options, args) = parser.parse_args()
+
+        self.user = options.user
+        self.password = options.password
+        self.host = options.host
+        self.use_ssl = options.use_ssl
+
+        self._args = args
+        self._options = options
+
+
 def iterMailboxNames(conn) :
     """
-    @param conn: The IMAP4-Connection 
+    @param conn: The IMAP4-Connection
     @type  conn: imaplib.IMAP4 | imaplib.IMAP4_SSL
     """
     (listCode, listResult) = conn.list() # Unterschied zu IMAP4.lsub ?
@@ -207,7 +273,7 @@ def printCapabilities(conn, capabilities) :
     """
 
     #print "  namespace: %r" % M.namespace()
-        
+
     # Some methods from the Python library 'imaplib' will only work
     # if the server does support the specific capabilities.
     capabilitiesOfInterest = set(capabilities)
@@ -221,11 +287,11 @@ def printCapabilities(conn, capabilities) :
     # Novel Groupwiese
     # https://www.novell.com/documentation/groupwise_sdk/gwsdk_gwimap/data/al7te9j.html
     capabilitiesOfInterest.add('XGWEXTENSIONS')
-    
+
     print
     print "  %-20s | supported " % ("Capabilities",)
     print "  %s-+-----------" % ("-"*20,)
-    
+
     for capName in sorted(capabilitiesOfInterest) :
         supported = capName in capabilities
         print "  %-20s | %s" % (capName, "%s" % ('SUPPORTED' if supported else 'NO'))
@@ -258,7 +324,96 @@ def printMailboxesWithItemCount(conn) :
         (okCheck, checkResultList) = conn.check()
         checkResult = checkResultList[0]
         print "  %(mailbox)-20s | %(msgCount)5s  | %(markerString)6s | %(attributeString)s " % locals()
-      
+
+
+def HandleInvalidArguments(cli) :
+    """
+    @return: final exit code
+    @rtype:  int
+    """
+    cli.usage()
+    return cli.MapNagiosReturnCode(NAGIOS_RC_UNKNOWN)
+
+
+def HandleMissingArguments(cli) :
+    """
+    @return: final exit code
+    @rtype:  int
+    """
+    cli.usage()
+    return cli.MapNagiosReturnCode(NAGIOS_RC_WARNING)
+
+
+def HandleCannotConnectError(cli, e) :
+    """
+    @return: final exit code
+    @rtype:  int
+    """
+    host = cli.GetHostname()
+    print "CRITICAL: Could not connect to %s: %s" % (host, e)
+    return cli.MapNagiosReturnCode(NAGIOS_RC_CRITICAL)
+
+
+def HandleCannotLoginError(cli, e) :
+    """
+    @return: final exit code
+    @rtype:  int
+    """
+    print "CRITICAL: IMAP Login not Successful: %s" % e
+    return cli.MapNagiosReturnCode(NAGIOS_RC_CRITICAL)
+
+
+def HandleSuccessfulLogin(cli, conn, connectDelay, loginDelay) :
+    """
+    @param conn: the IMAP connection
+
+    @param connectDelay, loginDelay: Timing
+    @type  connectDelay, loginDelay: float
+
+    @return: final exit code
+    @rtype:  int
+    """
+    capabilities = conn.capabilities
+
+    if cli.IsVerboseForHumans() :
+        print "OK IMAP Login Successful"
+        print "  Connect:  %(connectDelay).2fms" % locals()
+        print "  Login:    %(loginDelay).2fms" % locals()
+        if cli.ShouldPrintCapabilities() :
+            printCapabilities(conn, capabilities)
+        if cli.ShouldPrintMailboxes() :
+            printMailboxesWithItemCount(conn)
+
+    elif FLAG_IS_MUNIN_PLUGIN : # Munin
+        HandleMeasureCommand(cli, connectDelay, loginDelay)
+
+    conn.logout()
+    return cli.MapNagiosReturnCode(NAGIOS_RC_OK)
+
+def HandleMeasureCommand(cli, connectDelay, loginDelay) :
+    """
+    @return: final exit code
+    @rtype:  int
+    """
+    variableName = MONITOR_MEASURED_VARIABLE
+    if FLAG_IS_MUNIN_PLUGIN :
+        print "%(variableName)s.value %(loginDelay).2f" % locals()
+
+
+def HandleConfigCommand(cli) :
+    """
+    @return: final exit code
+    @rtype:  int
+    """
+    graphTitle = MONITOR_GRAPH_TITLE
+    graphLabel = MONITOR_GRAPH_LABEL
+    variableName = MONITOR_MEASURED_VARIABLE
+    if FLAG_IS_MUNIN_PLUGIN :
+        print "graph_title %(graphTitle)s" % locals()
+        print "graph_vlabel %(graphLabel)s" % locals()
+        print "%(variableName)s.label %(graphLabel)s" % locals()
+    return 0
+
 
 def main():
 
@@ -266,54 +421,41 @@ def main():
     try:
         cli.evaluate()
     except getopt.GetoptError:
-        cli.usage()
-        return NAGIOS_RC_UNKNOWN
-    
+        return HandleInvalidArguments(cli)
+
+    if cli.IsConfigMode() :
+        return HandleConfigCommand(cli)
+
     user = cli.GetUser()
     host = cli.GetHostname()
     password = cli.GetPassword()
     use_ssl = cli.ShouldUseSSL()
-    
+
     if user == None or password == None or host == None:
-        cli.usage()
-        return NAGIOS_RC_WARNING
+        return HandleMissingArguments(cli)
 
     timepreconnect = time.time()
-    
+
     try:
         if use_ssl:
             M = imaplib.IMAP4_SSL(host=host)
         else:
             M = imaplib.IMAP4(host)
-    except Exception, e:
-        print "CRITICAL: Could not connect to %s: %s" % (host, e)
-        return NAGIOS_RC_CRITICAL
-    
+    except Exception as e:
+        return HandleCannotConnectError(cli, e)
+
     timeprelogin = time.time()
-    
-    try:        
+
+    try:
         M.login(user, password)
-    except Exception, e:
-        print "CRITICAL: IMAP Login not Successful: %s" % e
-        return NAGIOS_RC_CRITICAL
-    
+    except Exception as e:
+        return HandleCannotLoginError(cli, e)
+
     timepostlogin = time.time()
-    connectdelay = (timeprelogin-timepreconnect)*1000
-    logindelay = (timepostlogin-timeprelogin)*1000
+    connectDelay = (timeprelogin - timepreconnect) * 1000
+    loginDelay = (timepostlogin - timeprelogin) * 1000
 
-    capabilities = M.capabilities
-    
-    print "OK IMAP Login Successful"
-    print "  Connect:  %(connectdelay).2fms" % locals()
-    print "  Login:    %(logindelay).2fms" % locals()
-        
-    printCapabilities(M, capabilities)
-
-    printMailboxesWithItemCount(M)
-    
-    M.logout()
-    return NAGIOS_RC_OK
+    return HandleSuccessfulLogin(cli, M, connectDelay, loginDelay)
 
 if __name__ == "__main__":
     sys.exit(main())
-
