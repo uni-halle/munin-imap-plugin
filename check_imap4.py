@@ -53,12 +53,54 @@ NAGIOS_RC_UNKNOWN = 3
 
 
 #---
-def usage():
-    print "-u <user>"
-    print "-p <password>"
-    print "-s use SSL"
-    print "-H <host>"
+class CLI(object) :
 
+    _SINGLETON_INSTANCE = None #: Singleton Pattern
+    
+    def __init__(self) :
+        self.opts = None
+        self.args = None
+        self.user = None
+        self.host = None
+        self.password = None
+        self.use_ssl = None
+
+    def GetUser(self) :
+        return self.user
+
+    def GetHostname(self) :
+        return self.host
+
+    def GetPassword(self) :
+        return self.password
+
+    def ShouldUseSSL(self) :
+        return self.use_ssl
+    
+    @classmethod
+    def GetInstance(cls) :
+        if cls._SINGLETON_INSTANCE is None :
+            cls._SINGLETON_INSTANCE = cls()
+        return cls._SINGLETON_INSTANCE
+    
+    def usage(self):
+        print "-u <user>"
+        print "-p <password>"
+        print "-s use SSL"
+        print "-H <host>"
+
+    def evaluate(self) :
+        self.opts, self.args = getopt.getopt(sys.argv[1:], "u:p:sH:")
+        for o, a in self.opts:
+            if o == "-u":
+                self.user = a
+            elif o == "-p":
+                self.password = a
+            elif o == "-s":
+                self.use_ssl = True
+            elif o == "-H":
+                self.host = a
+               
     
 def iterMailboxNames(conn) :
     """
@@ -188,25 +230,21 @@ def printMailboxesWithItemCount(conn) :
       
 
 def main():
+
+    cli = CLI.GetInstance()
     try:
-        opts, args = getopt.getopt(sys.argv[1:], "u:p:sH:")
+        cli.evaluate()
     except getopt.GetoptError:
-        usage()
+        cli.usage()
         return NAGIOS_RC_UNKNOWN
     
-    user = host = password = use_ssl = None
+    user = cli.GetUser()
+    host = cli.GetHostname()
+    password = cli.GetPassword()
+    use_ssl = cli.ShouldUseSSL()
     
-    for o, a in opts:
-        if o == "-u":
-            user = a
-        elif o == "-p":
-            password = a
-        elif o == "-s":
-            use_ssl = True
-        elif o == "-H":
-            host = a  
     if user == None or password == None or host == None:
-        usage()
+        cli.usage()
         return NAGIOS_RC_WARNING
 
     timepreconnect = time.time()
