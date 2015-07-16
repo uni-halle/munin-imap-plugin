@@ -17,10 +17,12 @@
 # See "LICENSE.GPL" in the source distribution for more information.
 # 
 
-import sys
-import os
-import imaplib
+#---
+#--- Python
 import getopt
+import imaplib
+import os
+import sys
 import time
 
 #---
@@ -47,7 +49,8 @@ NAGIOS_RC_CRITICAL = 2
 NAGIOS_RC_UNKNOWN = 3
 
 #---
-#--- Munin Constants
+#--- Munin Constants (http://munin-monitoring.org/wiki/HowToWritePlugins)
+
 
 #---
 def usage():
@@ -66,9 +69,123 @@ def iterMailboxNames(conn) :
     for mbString in listResult :
         mbParts = mbString.split('"/"')
         mbNameWithQuotes = mbParts[-1].strip()
+        firstPart = mbParts[0].strip()[1:-1]
+        markers = list(m.lower().strip() for m in firstPart.split(' '))
         mbName = mbNameWithQuotes[1:-1]
-        yield mbName
+        yield mbName, markers
         continue
+
+def printCapabilities(capabilities) :
+    """
+    What capabilities does the IMAP server support?
+    On http://www.iana.org/assignments/imap-capabilities/imap-capabilities.xhtml
+    the following capabilities are listed::
+
+        ACL                     [RFC4314]
+        ANNOTATE-EXPERIMENT-1   [RFC5257]
+        AUTH=                   [RFC3501]
+        BINARY                  [RFC3516]
+        CATENATE                [RFC4469]
+        CHILDREN                [RFC3348]
+        COMPRESS=DEFLATE        [RFC4978]
+        CONDSTORE               [RFC7162]
+        CONTEXT=SEARCH          [RFC5267]
+        CONTEXT=SORT            [RFC5267]
+        CONVERT                 [RFC5259]
+        CREATE-SPECIAL-USE      [RFC6154]
+        ENABLE                  [RFC5161]
+        ESEARCH                 [RFC4731]
+        ESORT                   [RFC5267]
+        FILTERS                 [RFC5466]
+        I18NLEVEL=1             [RFC5255]
+        I18NLEVEL=2             [RFC5255]
+        ID                      [RFC2971]
+        IDLE                    [RFC2177]
+        IMAPSIEVE=              [RFC6785]
+        LANGUAGE                [RFC5255]
+        LIST-EXTENDED           [RFC5258]
+        LIST-STATUS             [RFC5819]
+        LITERAL+                [RFC2088]
+        LOGIN-REFERRALS         [RFC2221]
+        LOGINDISABLED           [RFC2595][RFC3501]
+        MAILBOX-REFERRALS       [RFC2193]
+        METADATA                [RFC5464]
+        METADATA-SERVER         [RFC5464]
+        MOVE                    [RFC6851]
+        MULTIAPPEND             [RFC3502]
+        MULTISEARCH             [RFC7377]
+        NAMESPACE               [RFC2342]
+        NOTIFY                  [RFC5465]
+        QRESYNC                 [RFC7162]
+        QUOTA                   [RFC2087]
+        RIGHTS=                 [RFC4314]
+        SASL-IR                 [RFC4959]
+        SEARCH=FUZZY            [RFC6203]
+        SEARCHRES               [RFC5182]
+        SORT                    [RFC5256]
+        SORT=DISPLAY            [RFC5957]
+        SPECIAL-USE             [RFC6154]
+        STARTTLS                [RFC2595][RFC3501]
+        THREAD                  [RFC5256]
+        UIDPLUS                 [RFC4315]
+        UNSELECT                [RFC3691]
+        URLFETCH=BINARY         [RFC5524]
+        URL-PARTIAL             [RFC5550]
+        URLAUTH                 [RFC4467]
+        UTF8=ACCEPT             [RFC6855]
+        UTF8=ALL     (OBSOLETE) [RFC5738][RFC6855]
+        UTF8=APPEND  (OBSOLETE) [RFC5738][RFC6855]
+        UTF8=ONLY               [RFC6855]
+        UTF8=USER    (OBSOLETE) [RFC5738][RFC6855]
+        WITHIN                  [RFC5032]
+
+
+    @param capabilites: contains the CAPABILITIES of the IMAP server
+    @type  capabilites: tuple of str
+    """
+
+    #print "  namespace: %r" % M.namespace()
+        
+    # Some methods from the Python library 'imaplib' will only work
+    # if the server does support the specific capabilities.
+    capabilitiesOfInterest = set(capabilities)
+    capabilitiesOfInterest.add('ACL') # e.g. Cyrus Server
+    capabilitiesOfInterest.add('CHILDREN') # /Noinferiors
+    capabilitiesOfInterest.add('QUOTA')
+    capabilitiesOfInterest.add('AUTH=CRAM-MD5')
+    capabilitiesOfInterest.add('NAMESPACE')
+    
+    print
+    print "  %-20s | supported " % ("Capabilities",)
+    print "  %s-+-----------" % ("-"*20,)
+    
+    for capName in sorted(capabilitiesOfInterest) :
+        supported = capName in capabilities
+        print "  %-20s | %s" % (capName, "%s" % ('SUPPORTED' if supported else 'NO'))
+
+
+def printMailboxesWithItemCount(conn) :
+    """
+    List details for all mailboxes
+    """
+    print
+    print "  %-20s | #count | marked | other attributes" % ("Mailbox",)
+    print "  %s-+--------+--------+-%s" % ("-"*20,"-"*20)
+    for mailbox, markers in iterMailboxNames(conn) :
+        (okSelect, msgCountList) = conn.select(mailbox, readonly = True)
+        isMarked = '\marked' in markers
+        attributeSet = set(markers)
+        attributeSet.discard('\marked')
+        attributeSet.discard('\unmarked')
+        markerString = "MARKED" if isMarked else "  NO  "
+        attributeString = ", ".join(sorted(attributeSet))
+        msgCount = msgCountList[0]
+        #acl = M.myrights(mailbox) # works only with ACL
+        #quotaRoots = M.getquotaroot(mailbox) # works only with QUOTA
+        (okCheck, checkResultList) = conn.check()
+        checkResult = checkResultList[0]
+        print "  %(mailbox)-20s | %(msgCount)5s  | %(markerString)6s | %(attributeString)s " % locals()
+      
 
 def main():
     try:
@@ -120,99 +237,10 @@ def main():
     print "OK IMAP Login Successful"
     print "  Connect:  %(connectdelay).2fms" % locals()
     print "  Login:    %(logindelay).2fms" % locals()
-
-    #print "  namespace: %r" % M.namespace()
-     
-    # What capabilities does the IMAP server support?
-    # http://www.iana.org/assignments/imap-capabilities/imap-capabilities.xhtml
-    # ACL                       [RFC4314]
-    # ANNOTATE-EXPERIMENT-1     [RFC5257]
-    # AUTH= 	                [RFC3501]
-    # BINARY 	                [RFC3516]
-    # CATENATE 	                [RFC4469]
-    # CHILDREN 	                [RFC3348]
-    # COMPRESS=DEFLATE 	        [RFC4978]
-    # CONDSTORE 	        [RFC7162]
-    # CONTEXT=SEARCH 	        [RFC5267]
-    # CONTEXT=SORT 	        [RFC5267]
-    # CONVERT 	                [RFC5259]
-    # CREATE-SPECIAL-USE 	[RFC6154]
-    # ENABLE 	                [RFC5161]
-    # ESEARCH 	                [RFC4731]
-    # ESORT 	                [RFC5267]
-    # FILTERS 	                [RFC5466]
-    # I18NLEVEL=1 	        [RFC5255]
-    # I18NLEVEL=2 	        [RFC5255]
-    # ID 	                [RFC2971]
-    # IDLE 	                [RFC2177]
-    # IMAPSIEVE= 	        [RFC6785]
-    # LANGUAGE 	                [RFC5255]
-    # LIST-EXTENDED 	        [RFC5258]
-    # LIST-STATUS 	        [RFC5819]
-    # LITERAL+ 	                [RFC2088]
-    # LOGIN-REFERRALS 	        [RFC2221]
-    # LOGINDISABLED 	        [RFC2595][RFC3501]
-    # MAILBOX-REFERRALS 	[RFC2193]
-    # METADATA 	                [RFC5464]
-    # METADATA-SERVER 	        [RFC5464]
-    # MOVE 	                [RFC6851]
-    # MULTIAPPEND 	        [RFC3502]
-    # MULTISEARCH 	        [RFC7377]
-    # NAMESPACE 	        [RFC2342]
-    # NOTIFY 	                [RFC5465]
-    # QRESYNC 	                [RFC7162]
-    # QUOTA 	                [RFC2087]
-    # RIGHTS= 	                [RFC4314]
-    # SASL-IR 	                [RFC4959]
-    # SEARCH=FUZZY 	        [RFC6203]
-    # SEARCHRES 	        [RFC5182]
-    # SORT 	                [RFC5256]
-    # SORT=DISPLAY 	        [RFC5957]
-    # SPECIAL-USE 	        [RFC6154]
-    # STARTTLS 	                [RFC2595][RFC3501]
-    # THREAD 	                [RFC5256]
-    # UIDPLUS 	                [RFC4315]
-    # UNSELECT 	                [RFC3691]
-    # URLFETCH=BINARY 	        [RFC5524]
-    # URL-PARTIAL 	        [RFC5550]
-    # URLAUTH 	                [RFC4467]
-    # UTF8=ACCEPT 	        [RFC6855]
-    # UTF8=ALL      (OBSOLETE) 	[RFC5738][RFC6855]
-    # UTF8=APPEND   (OBSOLETE) 	[RFC5738][RFC6855]
-    # UTF8=ONLY 	        [RFC6855]
-    # UTF8=USER     (OBSOLETE) 	[RFC5738][RFC6855]
-    # WITHIN 	                [RFC5032]
-
-    # Some methods from the Python library 'imaplib' will only work
-    # if the server does support the specific capabilities.
-    capabilitiesOfInterest = set(capabilities)
-    capabilitiesOfInterest.add('ACL') # e.g. Cyrus Server
-    capabilitiesOfInterest.add('QUOTA')
-    capabilitiesOfInterest.add('AUTH=CRAM-MD5')
-    capabilitiesOfInterest.add('NAMESPACE')
-    
-    print
-    print "  %-20s | present " % ("Capabilities",)
-    print "  %s-+--------" % ("-"*20,)
-    
-    for capName in sorted(capabilitiesOfInterest) :
-        supported = capName in capabilities
-        print "  %-20s | %s  " % (capName, "  %s  " % ('X' if supported else ' '))
         
+    printCapabilities(capabilities)
 
-    # List details for all mailboxes
-    print
-    print "  %-20s | #count " % ("Mailbox",)
-    print "  %s-+--------" % ("-"*20,)
-    for mailbox in iterMailboxNames(M) :
-        (okSelect, msgCountList) = M.select(mailbox, readonly = True)
-        msgCount = msgCountList[0]
-        #acl = M.myrights(mailbox) # works only with ACL
-        #quotaRoots = M.getquotaroot(mailbox) # works only with QUOTA
-        (okCheck, checkResultList) = M.check()
-        checkResult = checkResultList[0]
-        print "  %(mailbox)-20s | %(msgCount)5s  " % locals()
-      
+    printMailboxesWithItemCount(M)
     
     M.logout()
     return NAGIOS_RC_OK
