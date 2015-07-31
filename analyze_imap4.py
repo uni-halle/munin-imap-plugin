@@ -52,11 +52,11 @@ NAGIOS_RC_UNKNOWN = 3
 #---
 #--- Munin Constants (http://munin-monitoring.org/wiki/HowToWritePlugins)
 
-FLAG_PRINT_CAPABILITIES = False # or True
+FLAG_PRINT_CAPABILITIES = True
 FLAG_PRINT_MAILBOXES = False # or True
 FLAG_VERBOSE_FOR_HUMANS = False # or True
-FLAG_MAP_NAGIOS_RETURN_CODES_TO_ZERO = True # or False
-FLAG_IS_MUNIN_PLUGIN = True # False currently not supported
+FLAG_MAP_NAGIOS_RETURN_CODES_TO_ZERO = False
+FLAG_IS_MUNIN_PLUGIN = False # False currently not supported
 
 
 MONITOR_GRAPH_TITLE = "Load average"
@@ -177,9 +177,14 @@ def iterMailboxNames(conn) :
     for mbString in listResult :
         mbParts = mbString.split('"/"')
         mbNameWithQuotes = mbParts[-1].strip()
-        firstPart = mbParts[0].strip()[1:-1]
+        firstPartStripped = mbParts[0].strip()
+        firstPart = firstPartStripped[1:-1]
         markers = list(m.lower().strip() for m in firstPart.split(' '))
-        mbName = mbNameWithQuotes[1:-1]
+        isQuoted = mbNameWithQuotes.startswith('"') or mbNameWithQuotes.startswith("'")
+        if isQuoted :
+            mbName = mbNameWithQuotes[1:-1]
+        else :
+            mbName = mbNameWithQuotes
         yield mbName, markers
         continue
 
@@ -200,7 +205,7 @@ def printCapabilities(conn, capabilities) :
         CONTEXT=SEARCH          [RFC5267]
         CONTEXT=SORT            [RFC5267]
         CONVERT                 [RFC5259]
-        CREATE-SPECIAL-USE      [RFC6154]
+        CREATE-SPECIAL-USE      [RFC6154] # IMAP LIST Extension for Special-Use Mailboxes
         ENABLE                  [RFC5161]
         ESEARCH                 [RFC4731]
         ESORT                   [RFC5267]
@@ -211,6 +216,7 @@ def printCapabilities(conn, capabilities) :
         IDLE                    [RFC2177]
         IMAPSIEVE=              [RFC6785]
         LANGUAGE                [RFC5255]
+        LIST
         LIST-EXTENDED           [RFC5258]
         LIST-STATUS             [RFC5819]
         LITERAL+                [RFC2088]
@@ -232,7 +238,7 @@ def printCapabilities(conn, capabilities) :
         SEARCHRES               [RFC5182]
         SORT                    [RFC5256]
         SORT=DISPLAY            [RFC5957]
-        SPECIAL-USE             [RFC6154]
+        SPECIAL-USE             [RFC6154] # IMAP LIST Extension for Special-Use Mailboxes
         STARTTLS                [RFC2595][RFC3501]
         THREAD                  [RFC5256]
         UIDPLUS                 [RFC4315]
@@ -280,7 +286,9 @@ def printCapabilities(conn, capabilities) :
     capabilitiesOfInterest.add('ACL') # e.g. Cyrus Server
     capabilitiesOfInterest.add('ANNOTATIONS') # non-standard, but supported by Cyrus Server
     capabilitiesOfInterest.add('CHILDREN') # /Noinferiors
+    capabilitiesOfInterest.add('IDLE') # Push-Notification
     capabilitiesOfInterest.add('QUOTA')
+    capabilitiesOfInterest.add('SPECIAL-USE') # Auszeichnugn von Junk, Trash etc.
     capabilitiesOfInterest.add('AUTH=CRAM-MD5')
     capabilitiesOfInterest.add('NAMESPACE')
 
@@ -289,12 +297,12 @@ def printCapabilities(conn, capabilities) :
     capabilitiesOfInterest.add('XGWEXTENSIONS')
 
     print
-    print "  %-20s | supported " % ("Capabilities",)
-    print "  %s-+-----------" % ("-"*20,)
+    print "  %-29s | supported " % ("Capabilities",)
+    print "  %s-+-----------" % ("-"*29,)
 
     for capName in sorted(capabilitiesOfInterest) :
         supported = capName in capabilities
-        print "  %-20s | %s" % (capName, "%s" % ('SUPPORTED' if supported else 'NO'))
+        print "  %-29s | %s" % (capName, "%s" % ('SUPPORTED' if supported else 'NO'))
 
 #    for xcapName in sorted(capabilitiesOfInterest) :
 #        if xcapName.startswith('X') :
@@ -302,28 +310,68 @@ def printCapabilities(conn, capabilities) :
 #            print xcapName
 #            print conn.xatom(xcapName)
 
+def decodeMailboxName(mbNameEncoded) :
+    """
+    Replace special characters with corresponding UTF-8 characters:
+        - &APY- = german umlaut oe
+        - &APw- = german umlaut ue
+        - ...
+    """
+    mbName = mbNameEncoded
+    replaceMap = {
+        # sorted lexicographically
+        "&APY-" : "ö",
+        "&APw-" : "ü",
+    }
+    for fromString, toString in replaceMap.iteritems() :
+        mbName = mbName.replace(fromString, toString)
+    return mbName.decode('utf-8')
 
 def printMailboxesWithItemCount(conn) :
     """
     List details for all mailboxes
     """
     print
-    print "  %-20s | #count | marked | other attributes" % ("Mailbox",)
-    print "  %s-+--------+--------+-%s" % ("-"*20,"-"*20)
-    for mailbox, markers in iterMailboxNames(conn) :
-        (okSelect, msgCountList) = conn.select(mailbox, readonly = True)
+    print "  %-20s | #count | marked | SPECIAL-USE | other attributes" % ("Mailbox",)
+    print "  %s-+--------+--------+-%s-+-%s" % ("-"*20,"-"*11,"-"*20)
+    for mbNameEncoded, markers in iterMailboxNames(conn) :
+        mbDisplayName = decodeMailboxName(mbNameEncoded)
+        (okSelect, msgCountList) = conn.select(mbNameEncoded, readonly = True)
+
         isMarked = '\marked' in markers
-        attributeSet = set(markers)
-        attributeSet.discard('\marked')
-        attributeSet.discard('\unmarked')
         markerString = "MARKED" if isMarked else "  NO  "
-        attributeString = ", ".join(sorted(attributeSet))
+        attributeSet = set(markers)
+        markerSet = set(['\marked', '\unmarked'])
+        for an in markerSet :
+            attributeSet.discard(an)
+
+        # RFC6154 SPECIAL-USE
+        specialSet = set([
+            r'\all',
+            r'\archive',
+            r'\drafts',
+            r'\flagged',
+            r'\junk',
+            r'\sent',
+            r'\trash',
+        ])
+        folderUsage = specialSet.intersection(markers)
+        specialUse = ", ".join(sorted(folderUsage))
+        for an in folderUsage :
+            attributeSet.discard(an)
+
+        attributeString = ", ".join(("'%s'" % an for an in sorted(attributeSet)))
         msgCount = msgCountList[0]
-        #acl = M.myrights(mailbox) # works only with ACL
-        #quotaRoots = M.getquotaroot(mailbox) # works only with QUOTA
-        (okCheck, checkResultList) = conn.check()
-        checkResult = checkResultList[0]
-        print "  %(mailbox)-20s | %(msgCount)5s  | %(markerString)6s | %(attributeString)s " % locals()
+        #acl = M.myrights(mbNameEncoded) # works only with ACL
+        #quotaRoots = M.getquotaroot(mbNameEncoded) # works only with QUOTA
+        if 0 :
+            # deaktiviert, da bei gmx.net folgender Fehler kam:
+            # imaplib.error: command CHECK illegal in state AUTH, only allowed in states SELECTED
+            (okCheck, checkResultList) = conn.check()
+            checkResult = checkResultList[0]
+            pass
+
+        print "  %(mbDisplayName)-20s | %(msgCount)5s  | %(markerString)6s | %(specialUse)-11s | %(attributeString)s " % locals()
 
 
 def HandleInvalidArguments(cli) :
@@ -375,17 +423,13 @@ def HandleSuccessfulLogin(cli, conn, connectDelay, loginDelay) :
     """
     capabilities = conn.capabilities
 
-    if cli.IsVerboseForHumans() :
-        print "OK IMAP Login Successful"
-        print "  Connect:  %(connectDelay).2fms" % locals()
-        print "  Login:    %(loginDelay).2fms" % locals()
-        if cli.ShouldPrintCapabilities() :
-            printCapabilities(conn, capabilities)
-        if cli.ShouldPrintMailboxes() :
-            printMailboxesWithItemCount(conn)
+    print "OK IMAP Login Successful"
+    print "  Connect:  %(connectDelay).2fms" % locals()
+    print "  Login:    %(loginDelay).2fms" % locals()
 
-    elif FLAG_IS_MUNIN_PLUGIN : # Munin
-        HandleMeasureCommand(cli, connectDelay, loginDelay)
+    printCapabilities(conn, capabilities)
+
+    printMailboxesWithItemCount(conn)
 
     conn.logout()
     return cli.MapNagiosReturnCode(NAGIOS_RC_OK)
@@ -438,9 +482,9 @@ def main():
 
     try:
         if use_ssl:
-            M = imaplib.IMAP4_SSL(host=host)
+            M = imaplib.IMAP4_SSL(host = host, port = 993)
         else:
-            M = imaplib.IMAP4(host)
+            M = imaplib.IMAP4(host, port = 143)
     except Exception as e:
         return HandleCannotConnectError(cli, e)
 
