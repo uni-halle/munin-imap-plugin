@@ -238,7 +238,7 @@ def HandleInvalidArguments(cli) :
     @rtype:  int
     """
     cli.printUsage()
-    return cli.MapNagiosReturnCode(plugin_helpers.NAGIOS_RC_UNKNOWN)
+    return cli.MapNagiosReturnCode(nagios_stuff.NAGIOS_RC_UNKNOWN)
 
 
 def HandleMissingArguments(cli) :
@@ -247,7 +247,7 @@ def HandleMissingArguments(cli) :
     @rtype:  int
     """
     cli.printUsage()
-    return cli.MapNagiosReturnCode(plugin_helpers.NAGIOS_RC_WARNING)
+    return cli.MapNagiosReturnCode(nagios_stuff.NAGIOS_RC_WARNING)
 
 
 def HandleCannotConnectError(cli, e) :
@@ -259,7 +259,7 @@ def HandleCannotConnectError(cli, e) :
     if 0  :
         host = cli.GetHostname()
         print "CRITICAL: Could not connect to %s: %s" % (host, e)
-    return cli.MapNagiosReturnCode(plugin_helpers.NAGIOS_RC_CRITICAL)
+    return cli.MapNagiosReturnCode(nagios_stuff.NAGIOS_RC_CRITICAL)
 
 
 def HandleCannotLoginError(cli, e) :
@@ -270,7 +270,7 @@ def HandleCannotLoginError(cli, e) :
     HandleMeasureCommand(cli, MUNIN_VALUE_CANNOT_LOGIN)
     if 0  :
         print "CRITICAL: IMAP Login not Successful: %s" % e
-    return cli.MapNagiosReturnCode(plugin_helpers.NAGIOS_RC_CRITICAL)
+    return cli.MapNagiosReturnCode(nagios_stuff.NAGIOS_RC_CRITICAL)
 
 
 def HandleSuccessfulLogin(cli, conn, connectDelay, loginDelay) :

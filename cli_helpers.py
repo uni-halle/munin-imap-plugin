@@ -122,3 +122,5 @@ class BaseCLI(object) :
         self._args = args
         self._options = options
 
+        if 0 :
+            print "'%s' with '%s' -> '%s'" % (self.user, self.password, self.host)
