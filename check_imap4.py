@@ -19,8 +19,7 @@
 
 #---
 #--- Python
-import getopt # until Python 2.6 use 'optparse' instead, from Python 2.7 on usae 'argparse' instead
-import optparse # von Python 2.3 bis Python 2.6 (danach deprecated)
+import optparse # von Python 2.3 bis Python 2.6 (usage 'argparse' from Python 2.7 on)
 import imaplib
 import os
 import sys
@@ -63,8 +62,12 @@ MONITOR_GRAPH_TITLE = "IMAP login time"
 MONITOR_GRAPH_LABEL = "imap_login_time"
 MONITOR_MEASURED_VARIABLE = "imap_login_time"
 
-MUNIN_VALUE_CANNOT_LOGIN=-100.0
-MUNIN_VALUE_CANNOT_CONNECT=-200.0
+MUNIN_VALUE_CANNOT_LOGIN = -100.0
+MUNIN_VALUE_CANNOT_CONNECT = -200.0
+
+ENV_NAME_IMAP_HOST = "MUNIN_IMAP_HOST"
+ENV_NAME_IMAP_PASS = "MUNIN_IMAP_PASSWORD"
+ENV_NAME_IMAP_USER = "MUNIN_IMAP_USER"
 
 #---
 class CLI(object) :
@@ -82,6 +85,13 @@ class CLI(object) :
         self._printMailboxes = FLAG_PRINT_MAILBOXES
         self._verboseForHumans = FLAG_VERBOSE_FOR_HUMANS
         self._mapNagiosReturnCodesToZero = FLAG_MAP_NAGIOS_RETURN_CODES_TO_ZERO
+
+        # take default values from environment variables
+        self.defaultUsername = os.environ.get(ENV_NAME_IMAP_USER, None)
+        self.defaultPassword = os.environ.get(ENV_NAME_IMAP_PASS, None)
+        self.defaultHostname = os.environ.get(ENV_NAME_IMAP_HOST, None)
+
+        self.parser = self.createParser()
 
     def IsConfigMode(self) :
         return 'config' in self._args
@@ -126,41 +136,48 @@ class CLI(object) :
             cls._SINGLETON_INSTANCE = cls()
         return cls._SINGLETON_INSTANCE
 
-    def usage(self):
-        print "-u <user>"
-        print "-p <password>"
-        print "-s use SSL"
-        print "-H <host>"
+    def printUsage(self):
+        self.parser.print_help()
 
-    def evaluate(self) :
-        parser = optparse.OptionParser()
+    def createParser(self) :
+        usage = "usage: %prog [options] [config]"
+        parser = optparse.OptionParser(usage = usage)
         parser.add_option("-u", "--user",
                           dest = "user",
-                          help = "login as USER",
+                          help = "Login as USER. If not specified content of environment variable '%s' will be used." % (ENV_NAME_IMAP_USER,),
                           action = "store",
                           type = "string",
-                          metavar = "USER")
+                          metavar = "USER",
+                          default = self.defaultUsername,
+        )
 
-        parser.add_option("-p", "--password",
+        parser.add_option("-p", "--passwd",
                           dest = "password",
-                          help = "login with PASSWORD",
+                          help = "Login with PASSWORD. If not specified content of environment variable '%s' will be used." % (ENV_NAME_IMAP_PASS,),
                           action = "store",
                           type = "string",
-                          metavar = "PASSWORD")
+                          metavar = "PASSWORD",
+                          default = self.defaultPassword,
+        )
 
         parser.add_option("-H", "--host",
                           dest = "host",
-                          help = "login on HOST",
+                          help = "Login on HOST. If not specified content of environment variable '%s' will be used." % (ENV_NAME_IMAP_HOST,),
                           action = "store",
                           type = "string",
-                          metavar = "HOST")
+                          metavar = "HOST",
+                          default = self.defaultHostname,
+        )
 
         parser.add_option("-s", "--secure",
                           dest = "use_ssl",
                           help = "secure connection with SSL/TLS",
-                          action = "store_true")
+                          action = "store_true",
+                          default = True)
+        return parser
 
-        (options, args) = parser.parse_args()
+    def evaluate(self) :
+        (options, args) = self.parser.parse_args()
 
         self.user = options.user
         self.password = options.password
@@ -334,7 +351,7 @@ def HandleInvalidArguments(cli) :
     @return: final exit code
     @rtype:  int
     """
-    cli.usage()
+    cli.printUsage()
     return cli.MapNagiosReturnCode(NAGIOS_RC_UNKNOWN)
 
 
@@ -343,7 +360,7 @@ def HandleMissingArguments(cli) :
     @return: final exit code
     @rtype:  int
     """
-    cli.usage()
+    cli.printUsage()
     return cli.MapNagiosReturnCode(NAGIOS_RC_WARNING)
 
 
@@ -421,6 +438,14 @@ def HandleConfigCommand(cli) :
     if FLAG_IS_MUNIN_PLUGIN :
         print "graph_title %(graphTitle)s" % locals()
         print "graph_vlabel %(graphLabel)s" % locals()
+        if 1 :
+            print "graph_args --base 1000 --lower-limit 0"
+            print "graph_scale no"
+
+        if 0 :
+            print "%(variableName)s.warning 10" % locals()
+            print "%(variableName)s.critical 120" % locals()
+
         print "%(variableName)s.label %(graphLabel)s" % locals()
     return 0
 
@@ -430,7 +455,7 @@ def main():
     cli = CLI.GetInstance()
     try:
         cli.evaluate()
-    except getopt.GetoptError:
+    except Exception :
         return HandleInvalidArguments(cli)
 
     if cli.IsConfigMode() :
