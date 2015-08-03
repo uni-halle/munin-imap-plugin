@@ -19,6 +19,7 @@
 #--- Python
 import optparse # von Python 2.3 bis Python 2.6 (usage 'argparse' from Python 2.7 on)
 import os
+import socket
 import sys
 import time
 
@@ -59,6 +60,8 @@ MONITOR_MEASURED_VARIABLE = "pop3_login_time"
 MUNIN_VALUE_CANNOT_LOGIN = -100.0
 MUNIN_VALUE_CANNOT_CONNECT = -200.0
 MUNIN_VALUE_MINIMUM = min(MUNIN_VALUE_CANNOT_LOGIN, MUNIN_VALUE_CANNOT_CONNECT)
+
+SOCKET_TIMEOUT_SECONDS = 5
 
 ENV_NAME_POP3_HOST = "POP3_HOST"
 ENV_NAME_POP3_PASS = "POP3_PASSWORD"
@@ -287,6 +290,8 @@ def main():
     timepreconnect = time.time()
 
     try:
+        import socket
+        socket.setdefaulttimeout(SOCKET_TIMEOUT_SECONDS)
         if use_ssl:
             M = poplib.POP3_SSL(host=host) # default port is 995
         else:

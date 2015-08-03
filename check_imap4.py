@@ -15,15 +15,18 @@
 # This file is distributed without any warranty; without even the implied
 # warranty of merchantability or fitness for a particular purpose.
 # See "LICENSE.GPL" in the source distribution for more information.
-#
 
 #---
 #--- Python
 import optparse # von Python 2.3 bis Python 2.6 (usage 'argparse' from Python 2.7 on)
-import imaplib
 import os
+import socket
 import sys
 import time
+
+#---
+#--- Python (Mail)
+import imaplib
 
 #---
 #--- Nagios Constants (https://nagios-plugins.org/doc/guidelines.html)
@@ -55,7 +58,6 @@ FLAG_PRINT_CAPABILITIES = False # or True
 FLAG_PRINT_MAILBOXES = False # or True
 FLAG_VERBOSE_FOR_HUMANS = False # or True
 FLAG_MAP_NAGIOS_RETURN_CODES_TO_ZERO = True # or False
-FLAG_IS_MUNIN_PLUGIN = True # False currently not supported
 
 
 MONITOR_GRAPH_TITLE = "IMAP login time"
@@ -65,6 +67,8 @@ MONITOR_MEASURED_VARIABLE = "imap_login_time"
 MUNIN_VALUE_CANNOT_LOGIN = -100.0
 MUNIN_VALUE_CANNOT_CONNECT = -200.0
 MUNIN_VALUE_MINIMUM = min(MUNIN_VALUE_CANNOT_LOGIN, MUNIN_VALUE_CANNOT_CONNECT)
+
+SOCKET_TIMEOUT_SECONDS = 5
 
 ENV_NAME_IMAP_HOST = "IMAP_HOST"
 ENV_NAME_IMAP_PASS = "IMAP_PASSWORD"
@@ -370,10 +374,9 @@ def HandleCannotConnectError(cli, e) :
     @return: final exit code
     @rtype:  int
     """
-    host = cli.GetHostname()
-    if FLAG_IS_MUNIN_PLUGIN :
-        HandleMeasureCommand(cli, MUNIN_VALUE_CANNOT_CONNECT)
-    else :
+    HandleMeasureCommand(cli, MUNIN_VALUE_CANNOT_CONNECT)
+    if 0  :
+        host = cli.GetHostname()
         print "CRITICAL: Could not connect to %s: %s" % (host, e)
     return cli.MapNagiosReturnCode(NAGIOS_RC_CRITICAL)
 
@@ -383,9 +386,8 @@ def HandleCannotLoginError(cli, e) :
     @return: final exit code
     @rtype:  int
     """
-    if FLAG_IS_MUNIN_PLUGIN :
-        HandleMeasureCommand(cli, MUNIN_VALUE_CANNOT_LOGIN)
-    else :
+    HandleMeasureCommand(cli, MUNIN_VALUE_CANNOT_LOGIN)
+    if 0  :
         print "CRITICAL: IMAP Login not Successful: %s" % e
     return cli.MapNagiosReturnCode(NAGIOS_RC_CRITICAL)
 
@@ -400,9 +402,12 @@ def HandleSuccessfulLogin(cli, conn, connectDelay, loginDelay) :
     @return: final exit code
     @rtype:  int
     """
-    capabilities = conn.capabilities
+
+    HandleMeasureCommand(cli, loginDelay)
+    #HandleMeasureCommand(cli, connectDelayd)
 
     if cli.IsVerboseForHumans() :
+        capabilities = conn.capabilities
         print "OK IMAP Login Successful"
         print "  Connect:  %(connectDelay).2fms" % locals()
         print "  Login:    %(loginDelay).2fms" % locals()
@@ -411,9 +416,6 @@ def HandleSuccessfulLogin(cli, conn, connectDelay, loginDelay) :
         if cli.ShouldPrintMailboxes() :
             printMailboxesWithItemCount(conn)
 
-    elif FLAG_IS_MUNIN_PLUGIN : # Munin
-        HandleMeasureCommand(cli, loginDelay)
-        #HandleMeasureCommand(cli, connectDelayd)
 
     conn.logout()
     return cli.MapNagiosReturnCode(NAGIOS_RC_OK)
@@ -424,8 +426,7 @@ def HandleMeasureCommand(cli, theValue) :
     @rtype:  int
     """
     variableName = MONITOR_MEASURED_VARIABLE
-    if FLAG_IS_MUNIN_PLUGIN :
-        print "%(variableName)s.value %(theValue).2f" % locals()
+    print "%(variableName)s.value %(theValue).2f" % locals()
 
 
 def HandleConfigCommand(cli) :
@@ -437,18 +438,18 @@ def HandleConfigCommand(cli) :
     graphLabel = MONITOR_GRAPH_LABEL
     variableName = MONITOR_MEASURED_VARIABLE
     lowerLimit = MUNIN_VALUE_MINIMUM
-    if FLAG_IS_MUNIN_PLUGIN :
-        print "graph_title %(graphTitle)s" % locals()
-        print "graph_vlabel %(graphLabel)s" % locals()
-        if 1 :
-            print "graph_args --base 1000 --lower-limit %(lowerLimit)f" % locals()
-            print "graph_scale no"
 
-        if 0 :
-            print "%(variableName)s.warning 10" % locals()
-            print "%(variableName)s.critical 120" % locals()
+    print "graph_title %(graphTitle)s" % locals()
+    print "graph_vlabel %(graphLabel)s" % locals()
+    if 1 :
+        print "graph_args --base 1000 --lower-limit %(lowerLimit)f" % locals()
+        print "graph_scale no"
 
-        print "%(variableName)s.label %(graphLabel)s" % locals()
+    if 0 :
+        print "%(variableName)s.warning 10" % locals()
+        print "%(variableName)s.critical 120" % locals()
+
+    print "%(variableName)s.label %(graphLabel)s" % locals()
     return 0
 
 
@@ -474,6 +475,8 @@ def main():
     timepreconnect = time.time()
 
     try:
+        import socket
+        socket.setdefaulttimeout(SOCKET_TIMEOUT_SECONDS)
         if use_ssl:
             M = imaplib.IMAP4_SSL(host=host)
         else:
@@ -495,4 +498,5 @@ def main():
     return HandleSuccessfulLogin(cli, M, connectDelay, loginDelay)
 
 if __name__ == "__main__":
-    sys.exit(main())
+    retCode = main()
+    sys.exit(retCode)
