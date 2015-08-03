@@ -28,6 +28,7 @@ import time
 #--- Python (Mail)
 import imaplib
 import email
+import email.header
 
 #---
 #--- Plugin Stuff
@@ -160,6 +161,9 @@ def printMailboxesWithItemCount(conn) :
 def printMailboxesWithLatestMail(conn) :
     """
     Prints all mailboxes with the lates message on top
+
+    Inspired by:
+    https://yuji.wordpress.com/2011/06/22/python-imaplib-imap-example-with-gmail/
     """
     for mailbox, markers in iterMailboxNames(conn) :
         (okSelect, msgCountList) = conn.select(mailbox, readonly = True)
@@ -174,8 +178,16 @@ def printMailboxesWithLatestMail(conn) :
             emailFrom = email.utils.parseaddr(email_message['From'])
             #print "To = %s" % (emailTo,)
             #print "From = %s" % (emailFrom,)
-            for emailHeader in email_message.items() :
-                print "    %s" % (emailHeader,)
+            for headerType, headerValueRaw in email_message.items() :
+                headerValueAndEncoding =  email.header.decode_header(headerValueRaw)
+                headerValue = headerValueAndEncoding[0][0]
+                headerEncoding = headerValueAndEncoding[0][1]
+                MAX_HEADER_LENGTH = 110
+                if len(headerValue) > MAX_HEADER_LENGTH :
+                    headerTrunc = headerValue[:MAX_HEADER_LENGTH-3] + '...'
+                else :
+                    headerTrunc = headerValue
+                print "    %-20s %s" % (headerType, headerTrunc,)
 
             if 0 :
                 # note that if you want to get text content (body) and the email contains
