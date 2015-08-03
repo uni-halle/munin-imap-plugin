@@ -20,14 +20,17 @@ function log () {
     fi
 }
 
+dir=$( dirname "$(readlink -f $0)" )
+
 log "DEBUG: argument 0 = $0"
 log "DEBUG: argument 1 = $1"
 
+log "DEBUG: script source = $dir"
 log "DEBUG: username = $TEST_MAIL_INTERNAL_USERNAME"
 log "DEBUG: hostname = $TEST_MAIL_INTERNAL_IMAP_HOST"
 
 if [[ "$1" = "config" ]]; then
-    python ./check_imap4.py config
+    python $dir/check_imap4.py config
 else
-    python ./check_imap4.py -u "$TEST_MAIL_INTERNAL_USERNAME" -p "$TEST_MAIL_INTERNAL_PASSWORD" -H "$TEST_MAIL_INTERNAL_IMAP_HOST" -s
+    python $dir/check_imap4.py -u "$TEST_MAIL_INTERNAL_USERNAME" -p "$TEST_MAIL_INTERNAL_PASSWORD" -H "$TEST_MAIL_INTERNAL_IMAP_HOST" -s
 fi
