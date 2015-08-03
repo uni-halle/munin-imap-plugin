@@ -64,6 +64,7 @@ MONITOR_MEASURED_VARIABLE = "imap_login_time"
 
 MUNIN_VALUE_CANNOT_LOGIN = -100.0
 MUNIN_VALUE_CANNOT_CONNECT = -200.0
+MUNIN_VALUE_MINIMUM = min(MUNIN_VALUE_CANNOT_LOGIN, MUNIN_VALUE_CANNOT_CONNECT)
 
 ENV_NAME_IMAP_HOST = "MUNIN_IMAP_HOST"
 ENV_NAME_IMAP_PASS = "MUNIN_IMAP_PASSWORD"
@@ -435,11 +436,12 @@ def HandleConfigCommand(cli) :
     graphTitle = MONITOR_GRAPH_TITLE
     graphLabel = MONITOR_GRAPH_LABEL
     variableName = MONITOR_MEASURED_VARIABLE
+    lowerLimit = MUNIN_VALUE_MINIMUM
     if FLAG_IS_MUNIN_PLUGIN :
         print "graph_title %(graphTitle)s" % locals()
         print "graph_vlabel %(graphLabel)s" % locals()
         if 1 :
-            print "graph_args --base 1000 --lower-limit 0"
+            print "graph_args --base 1000 --lower-limit %(lowerLimit)f" % locals()
             print "graph_scale no"
 
         if 0 :
