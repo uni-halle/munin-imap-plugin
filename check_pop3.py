@@ -17,7 +17,7 @@
 
 #---
 #--- Python
-import optparse # von Python 2.3 bis Python 2.6 (usage 'argparse' from Python 2.7 on)
+
 import os
 import socket
 import sys
@@ -28,27 +28,9 @@ import time
 import poplib
 
 #---
-#--- Nagios Constants (https://nagios-plugins.org/doc/guidelines.html)
-
-#: The plugin was able to check the service and it appeared to be
-#: functioning properly
-NAGIOS_RC_OK = 0
-
-#: The plugin was able to check the service, but it appeared to be above
-#: some "warning" threshold or did not appear to be working properly
-NAGIOS_RC_WARNING = 1
-
-#: The plugin detected that either the service was not running or it was
-#: above some "critical" threshold
-NAGIOS_RC_CRITICAL = 2
-
-#: Invalid command line arguments were supplied to the plugin or low-level
-#: failures internal to the plugin (such as unable to fork, or open a tcp
-#: socket) that prevent it from performing the specified operation.
-#: Higher-level errors (such as name resolution errors, socket timeouts, etc)
-#: are outside of the control of plugins and should generally NOT be reported
-#: as UNKNOWN states.
-NAGIOS_RC_UNKNOWN = 3
+#--- Plugin Stuff
+import cli_helpers
+import nagios_stuff
 
 #---
 #--- Munin Constants (http://munin-monitoring.org/wiki/HowToWritePlugins)
@@ -68,52 +50,15 @@ ENV_NAME_POP3_PASS = "POP3_PASSWORD"
 ENV_NAME_POP3_USER = "POP3_USER"
 
 #---
-class CLI(object) :
+class CLI(cli_helpers.BaseCLI) :
 
     _SINGLETON_INSTANCE = None #: Singleton Pattern
 
     def __init__(self) :
-        self._options = None
-        self._args = None
-        self.user = None
-        self.host = None
-        self.password = None
-        self.use_ssl = None
-        self._printCapabilities = False
-        self._printMailboxes = False
-        self._verboseForHumans = False
-        self._mapNagiosReturnCodesToZero = True # FLAG_MAP_NAGIOS_RETURN_CODES_TO_ZERO
-
-        # take default values from environment variables
-        self.defaultUsername = os.environ.get(ENV_NAME_POP3_USER, None)
-        self.defaultPassword = os.environ.get(ENV_NAME_POP3_PASS, None)
-        self.defaultHostname = os.environ.get(ENV_NAME_POP3_HOST, None)
-
-        self.parser = self.createParser()
-
-    def IsConfigMode(self) :
-        return 'config' in self._args
-
-    def GetUser(self) :
-        return self.user
-
-    def GetHostname(self) :
-        return self.host
-
-    def GetPassword(self) :
-        return self.password
-
-    def ShouldUseSSL(self) :
-        return self.use_ssl
-
-    def ShouldPrintCapabilities(self) :
-        return self._printCapabilities
-
-    def ShouldPrintMailboxes(self) :
-        return self._printMailboxes
-
-    def IsVerboseForHumans(self) :
-        return self._verboseForHumans
+        cli_helpers.BaseCLI.__init__(self,
+                                     ENV_NAME_POP3_USER,
+                                     ENV_NAME_POP3_PASS,
+                                     ENV_NAME_POP3_HOST)
 
     def MapNagiosReturnCode(self, nagiosReturnCode) :
         """
@@ -124,67 +69,9 @@ class CLI(object) :
             - 3 = UNKNOWN
         @type  nagiosReturnCode: int
         """
-        if self._mapNagiosReturnCodesToZero :
+        if True :
             return 0
         return nagiosReturnCode
-
-    @classmethod
-    def GetInstance(cls) :
-        if cls._SINGLETON_INSTANCE is None :
-            cls._SINGLETON_INSTANCE = cls()
-        return cls._SINGLETON_INSTANCE
-
-    def printUsage(self):
-        self.parser.print_help()
-
-    def createParser(self) :
-        usage = "usage: %prog [options] [config]"
-        parser = optparse.OptionParser(usage = usage)
-        parser.add_option("-u", "--user",
-                          dest = "user",
-                          help = "Login as USER. If not specified content of environment variable '%s' will be used." % (ENV_NAME_POP3_USER,),
-                          action = "store",
-                          type = "string",
-                          metavar = "USER",
-                          default = self.defaultUsername,
-        )
-
-        parser.add_option("-p", "--passwd",
-                          dest = "password",
-                          help = "Login with PASSWORD. If not specified content of environment variable '%s' will be used." % (ENV_NAME_POP3_PASS,),
-                          action = "store",
-                          type = "string",
-                          metavar = "PASSWORD",
-                          default = self.defaultPassword,
-        )
-
-        parser.add_option("-H", "--host",
-                          dest = "host",
-                          help = "Login on HOST. If not specified content of environment variable '%s' will be used." % (ENV_NAME_POP3_HOST,),
-                          action = "store",
-                          type = "string",
-                          metavar = "HOST",
-                          default = self.defaultHostname,
-        )
-
-        parser.add_option("-s", "--secure",
-                          dest = "use_ssl",
-                          help = "secure connection with SSL/TLS",
-                          action = "store_true",
-                          default = True)
-        return parser
-
-    def evaluate(self) :
-        (options, args) = self.parser.parse_args()
-
-        self.user = options.user
-        self.password = options.password
-        self.host = options.host
-        self.use_ssl = options.use_ssl
-
-        self._args = args
-        self._options = options
-
 
 def HandleCannotConnectError(cli, e) :
     """
@@ -195,7 +82,7 @@ def HandleCannotConnectError(cli, e) :
     if 0 :
         host = cli.GetHostname()
         print "CRITICAL: POP3 Connection not Successful: %s" % e
-    return NAGIOS_RC_CRITICAL
+    return nagios_stuff.NAGIOS_RC_CRITICAL
 
 
 def HandleCannotLoginError(cli, e) :
@@ -206,7 +93,7 @@ def HandleCannotLoginError(cli, e) :
     HandleMeasureCommand(cli, MUNIN_VALUE_CANNOT_LOGIN)
     if 0  :
         print "CRITICAL: POP3 Login not Successful: %s" % e
-    return NAGIOS_RC_CRITICAL
+    return nagios_stuff.NAGIOS_RC_CRITICAL
 
 
 def HandleSuccessfulLogin(cli, conn, connectDelay, loginDelay) :
@@ -229,12 +116,12 @@ def HandleSuccessfulLogin(cli, conn, connectDelay, loginDelay) :
             numMessages = len(M.list()[1])
         except Exception as e:
             print "CRITICAL: POP3 Cannot retrieve stat: %s" % e
-            return NAGIOS_RC_CRITICAL
+            return nagios_stuff.NAGIOS_RC_CRITICAL
         finally :
             M.quit
 
         print "OK POP3 Login Successful. N messages: ", numMessages
-    return NAGIOS_RC_OK
+    return nagios_stuff.NAGIOS_RC_OK
 
 def HandleMeasureCommand(cli, theValue) :
     """
