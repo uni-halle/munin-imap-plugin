@@ -59,9 +59,12 @@ FLAG_MAP_NAGIOS_RETURN_CODES_TO_ZERO = True # or False
 FLAG_IS_MUNIN_PLUGIN = True # False currently not supported
 
 
-MONITOR_GRAPH_TITLE = "Load average"
-MONITOR_GRAPH_LABEL = "load"
-MONITOR_MEASURED_VARIABLE = "load"
+MONITOR_GRAPH_TITLE = "IMAP login time"
+MONITOR_GRAPH_LABEL = "imap_login_time"
+MONITOR_MEASURED_VARIABLE = "imap_login_time"
+
+MUNIN_VALUE_CANNOT_LOGIN=-100.0
+MUNIN_VALUE_CANNOT_CONNECT=-200.0
 
 #---
 class CLI(object) :
@@ -350,7 +353,10 @@ def HandleCannotConnectError(cli, e) :
     @rtype:  int
     """
     host = cli.GetHostname()
-    print "CRITICAL: Could not connect to %s: %s" % (host, e)
+    if FLAG_IS_MUNIN_PLUGIN :
+        HandleMeasureCommand(cli, MUNIN_VALUE_CANNOT_CONNECT)
+    else :
+        print "CRITICAL: Could not connect to %s: %s" % (host, e)
     return cli.MapNagiosReturnCode(NAGIOS_RC_CRITICAL)
 
 
@@ -359,7 +365,10 @@ def HandleCannotLoginError(cli, e) :
     @return: final exit code
     @rtype:  int
     """
-    print "CRITICAL: IMAP Login not Successful: %s" % e
+    if FLAG_IS_MUNIN_PLUGIN :
+        HandleMeasureCommand(cli, MUNIN_VALUE_CANNOT_LOGIN)
+    else :
+        print "CRITICAL: IMAP Login not Successful: %s" % e
     return cli.MapNagiosReturnCode(NAGIOS_RC_CRITICAL)
 
 
@@ -385,19 +394,20 @@ def HandleSuccessfulLogin(cli, conn, connectDelay, loginDelay) :
             printMailboxesWithItemCount(conn)
 
     elif FLAG_IS_MUNIN_PLUGIN : # Munin
-        HandleMeasureCommand(cli, connectDelay, loginDelay)
+        HandleMeasureCommand(cli, loginDelay)
+        #HandleMeasureCommand(cli, connectDelayd)
 
     conn.logout()
     return cli.MapNagiosReturnCode(NAGIOS_RC_OK)
 
-def HandleMeasureCommand(cli, connectDelay, loginDelay) :
+def HandleMeasureCommand(cli, theValue) :
     """
     @return: final exit code
     @rtype:  int
     """
     variableName = MONITOR_MEASURED_VARIABLE
     if FLAG_IS_MUNIN_PLUGIN :
-        print "%(variableName)s.value %(loginDelay).2f" % locals()
+        print "%(variableName)s.value %(theValue).2f" % locals()
 
 
 def HandleConfigCommand(cli) :
