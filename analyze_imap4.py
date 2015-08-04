@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*-
 # vim: set fileencoding=utf-8 :
 # vi:si:et:sw=4:sts=4:ts=4
-# -*- coding: UTF-8 -*-
 # -*- Mode: Python -*-
 #
 # Copyright (C) 2005 Bertera Pietro <pietro@bertera.it>
@@ -19,90 +18,49 @@
 
 #---
 #--- Python
-import getopt # until Python 2.6 use 'optparse' instead, from Python 2.7 on usae 'argparse' instead
-import optparse # von Python 2.3 bis Python 2.6 (danach deprecated)
-import imaplib
 import os
+import socket
 import sys
 import time
 
 #---
-#--- Nagios Constants (https://nagios-plugins.org/doc/guidelines.html)
-
-#: The plugin was able to check the service and it appeared to be
-#: functioning properly
-NAGIOS_RC_OK = 0
-
-#: The plugin was able to check the service, but it appeared to be above
-#: some "warning" threshold or did not appear to be working properly
-NAGIOS_RC_WARNING = 1
-
-#: The plugin detected that either the service was not running or it was
-#: above some "critical" threshold
-NAGIOS_RC_CRITICAL = 2
-
-#: Invalid command line arguments were supplied to the plugin or low-level
-#: failures internal to the plugin (such as unable to fork, or open a tcp
-#: socket) that prevent it from performing the specified operation.
-#: Higher-level errors (such as name resolution errors, socket timeouts, etc)
-#: are outside of the control of plugins and should generally NOT be reported
-#: as UNKNOWN states.
-NAGIOS_RC_UNKNOWN = 3
+#--- Python (Mail)
+import imaplib
 
 #---
-#--- Munin Constants (http://munin-monitoring.org/wiki/HowToWritePlugins)
-
-FLAG_PRINT_CAPABILITIES = True
-FLAG_PRINT_MAILBOXES = False # or True
-FLAG_VERBOSE_FOR_HUMANS = False # or True
-FLAG_MAP_NAGIOS_RETURN_CODES_TO_ZERO = False
-FLAG_IS_MUNIN_PLUGIN = False # False currently not supported
-
-
-MONITOR_GRAPH_TITLE = "Load average"
-MONITOR_GRAPH_LABEL = "load"
-MONITOR_MEASURED_VARIABLE = "load"
+#--- Plugin Stuff
+import cli_helpers
+import nagios_stuff
+import munin_helpers
+import imap_helpers
 
 #---
-class CLI(object) :
+SOCKET_TIMEOUT_SECONDS = 5
+
+#---
+ENV_NAME_IMAP_HOST = "IMAP_HOST"
+ENV_NAME_IMAP_PASS = "IMAP_PASSWORD"
+ENV_NAME_IMAP_USER = "IMAP_USER"
+
+#---
+class CLI(cli_helpers.BaseCLI) :
 
     _SINGLETON_INSTANCE = None #: Singleton Pattern
 
     def __init__(self) :
-        self._options = None
-        self._args = None
-        self.user = None
-        self.host = None
-        self.password = None
-        self.use_ssl = None
-        self._printCapabilities = FLAG_PRINT_CAPABILITIES
-        self._printMailboxes = FLAG_PRINT_MAILBOXES
-        self._verboseForHumans = FLAG_VERBOSE_FOR_HUMANS
-        self._mapNagiosReturnCodesToZero = FLAG_MAP_NAGIOS_RETURN_CODES_TO_ZERO
-
-    def IsConfigMode(self) :
-        return 'config' in self._args
-
-    def GetUser(self) :
-        return self.user
-
-    def GetHostname(self) :
-        return self.host
-
-    def GetPassword(self) :
-        return self.password
-
-    def ShouldUseSSL(self) :
-        return self.use_ssl
+        cli_helpers.BaseCLI.__init__(self,
+                                     ENV_NAME_IMAP_USER,
+                                     ENV_NAME_IMAP_PASS,
+                                     ENV_NAME_IMAP_HOST)
 
     def ShouldPrintCapabilities(self) :
-        return self._printCapabilities
+        return True
 
     def ShouldPrintMailboxes(self) :
-        return self._printMailboxes
+        return True
 
     def IsVerboseForHumans(self) :
-        return self._verboseForHumans
+        return True
 
     def MapNagiosReturnCode(self, nagiosReturnCode) :
         """
@@ -113,60 +71,9 @@ class CLI(object) :
             - 3 = UNKNOWN
         @type  nagiosReturnCode: int
         """
-        if self._mapNagiosReturnCodesToZero :
+        if True :
             return 0
         return nagiosReturnCode
-
-    @classmethod
-    def GetInstance(cls) :
-        if cls._SINGLETON_INSTANCE is None :
-            cls._SINGLETON_INSTANCE = cls()
-        return cls._SINGLETON_INSTANCE
-
-    def usage(self):
-        print "-u <user>"
-        print "-p <password>"
-        print "-s use SSL"
-        print "-H <host>"
-
-    def evaluate(self) :
-        parser = optparse.OptionParser()
-        parser.add_option("-u", "--user",
-                          dest = "user",
-                          help = "login as USER",
-                          action = "store",
-                          type = "string",
-                          metavar = "USER")
-
-        parser.add_option("-p", "--password",
-                          dest = "password",
-                          help = "login with PASSWORD",
-                          action = "store",
-                          type = "string",
-                          metavar = "PASSWORD")
-
-        parser.add_option("-H", "--host",
-                          dest = "host",
-                          help = "login on HOST",
-                          action = "store",
-                          type = "string",
-                          metavar = "HOST")
-
-        parser.add_option("-s", "--secure",
-                          dest = "use_ssl",
-                          help = "secure connection with SSL/TLS",
-                          action = "store_true")
-
-        (options, args) = parser.parse_args()
-
-        self.user = options.user
-        self.password = options.password
-        self.host = options.host
-        self.use_ssl = options.use_ssl
-
-        self._args = args
-        self._options = options
-
 
 def iterMailboxNames(conn) :
     """
@@ -380,7 +287,7 @@ def HandleInvalidArguments(cli) :
     @rtype:  int
     """
     cli.usage()
-    return cli.MapNagiosReturnCode(NAGIOS_RC_UNKNOWN)
+    return 0
 
 
 def HandleMissingArguments(cli) :
@@ -389,7 +296,7 @@ def HandleMissingArguments(cli) :
     @rtype:  int
     """
     cli.usage()
-    return cli.MapNagiosReturnCode(NAGIOS_RC_WARNING)
+    return 0
 
 
 def HandleCannotConnectError(cli, e) :
@@ -399,7 +306,7 @@ def HandleCannotConnectError(cli, e) :
     """
     host = cli.GetHostname()
     print "CRITICAL: Could not connect to %s: %s" % (host, e)
-    return cli.MapNagiosReturnCode(NAGIOS_RC_CRITICAL)
+    return 0
 
 
 def HandleCannotLoginError(cli, e) :
@@ -408,7 +315,7 @@ def HandleCannotLoginError(cli, e) :
     @rtype:  int
     """
     print "CRITICAL: IMAP Login not Successful: %s" % e
-    return cli.MapNagiosReturnCode(NAGIOS_RC_CRITICAL)
+    return 0
 
 
 def HandleSuccessfulLogin(cli, conn, connectDelay, loginDelay) :
@@ -432,30 +339,6 @@ def HandleSuccessfulLogin(cli, conn, connectDelay, loginDelay) :
     printMailboxesWithItemCount(conn)
 
     conn.logout()
-    return cli.MapNagiosReturnCode(NAGIOS_RC_OK)
-
-def HandleMeasureCommand(cli, connectDelay, loginDelay) :
-    """
-    @return: final exit code
-    @rtype:  int
-    """
-    variableName = MONITOR_MEASURED_VARIABLE
-    if FLAG_IS_MUNIN_PLUGIN :
-        print "%(variableName)s.value %(loginDelay).2f" % locals()
-
-
-def HandleConfigCommand(cli) :
-    """
-    @return: final exit code
-    @rtype:  int
-    """
-    graphTitle = MONITOR_GRAPH_TITLE
-    graphLabel = MONITOR_GRAPH_LABEL
-    variableName = MONITOR_MEASURED_VARIABLE
-    if FLAG_IS_MUNIN_PLUGIN :
-        print "graph_title %(graphTitle)s" % locals()
-        print "graph_vlabel %(graphLabel)s" % locals()
-        print "%(variableName)s.label %(graphLabel)s" % locals()
     return 0
 
 
@@ -481,6 +364,8 @@ def main():
     timepreconnect = time.time()
 
     try:
+        import socket
+        socket.setdefaulttimeout(SOCKET_TIMEOUT_SECONDS)
         if use_ssl:
             M = imaplib.IMAP4_SSL(host = host, port = 993)
         else:

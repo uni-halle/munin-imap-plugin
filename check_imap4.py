@@ -17,7 +17,6 @@
 
 #---
 #--- Python
-import optparse # von Python 2.3 bis Python 2.6 (usage 'argparse' from Python 2.7 on)
 import os
 import socket
 import sys
@@ -41,8 +40,10 @@ MONITOR_GRAPH_TITLE = "IMAP login time"
 MONITOR_GRAPH_LABEL = "imap_login_time"
 MONITOR_MEASURED_VARIABLE = "imap_login_time"
 
+#---
 SOCKET_TIMEOUT_SECONDS = 5
 
+#---
 ENV_NAME_IMAP_HOST = "IMAP_HOST"
 ENV_NAME_IMAP_PASS = "IMAP_PASSWORD"
 ENV_NAME_IMAP_USER = "IMAP_USER"
