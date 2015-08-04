@@ -34,6 +34,7 @@ import email.header
 #--- Plugin Stuff
 import cli_helpers
 import nagios_stuff
+import munin_helpers
 
 #---
 #--- Munin Constants (http://munin-monitoring.org/wiki/HowToWritePlugins)
@@ -41,10 +42,6 @@ import nagios_stuff
 MONITOR_GRAPH_TITLE = "IMAP login time"
 MONITOR_GRAPH_LABEL = "imap_login_time"
 MONITOR_MEASURED_VARIABLE = "imap_login_time"
-
-MUNIN_VALUE_CANNOT_LOGIN = -100.0
-MUNIN_VALUE_CANNOT_CONNECT = -200.0
-MUNIN_VALUE_MINIMUM = min(MUNIN_VALUE_CANNOT_LOGIN, MUNIN_VALUE_CANNOT_CONNECT)
 
 SOCKET_TIMEOUT_SECONDS = 5
 
@@ -205,28 +202,6 @@ def printMailboxesWithLatestMail(conn) :
             print
         print
 
-def HandleCannotConnectError(cli, e) :
-    """
-    @return: final exit code
-    @rtype:  int
-    """
-    HandleMeasureCommand(cli, MUNIN_VALUE_CANNOT_CONNECT)
-    if 0  :
-        host = cli.GetHostname()
-        print "CRITICAL: Could not connect to %s: %s" % (host, e)
-    return cli.MapNagiosReturnCode(nagios_stuff.NAGIOS_RC_CRITICAL)
-
-
-def HandleCannotLoginError(cli, e) :
-    """
-    @return: final exit code
-    @rtype:  int
-    """
-    HandleMeasureCommand(cli, MUNIN_VALUE_CANNOT_LOGIN)
-    if 0  :
-        print "CRITICAL: IMAP Login not Successful: %s" % e
-    return cli.MapNagiosReturnCode(nagios_stuff.NAGIOS_RC_CRITICAL)
-
 
 def HandleSuccessfulLogin(cli, conn, connectDelay, loginDelay) :
     """
@@ -245,7 +220,7 @@ def HandleSuccessfulLogin(cli, conn, connectDelay, loginDelay) :
     if 0 :
         printMailboxesWithItemCount(conn)
 
-    if 0 :
+    if cli.IsVerbose() :
         printMailboxesWithLatestMail(conn)
 
     conn.logout()
@@ -268,7 +243,7 @@ def HandleConfigCommand(cli) :
     graphTitle = MONITOR_GRAPH_TITLE
     graphLabel = MONITOR_GRAPH_LABEL
     variableName = MONITOR_MEASURED_VARIABLE
-    lowerLimit = MUNIN_VALUE_MINIMUM
+    lowerLimit = munin_helpers.MUNIN_VALUE_MINIMUM
 
     print "graph_title %(graphTitle)s" % locals()
     print "graph_vlabel %(graphLabel)s" % locals()
@@ -289,8 +264,8 @@ def main():
     cli = CLI.GetInstance()
     try:
         cli.evaluate()
-    except Exception :
-        return cli_helpers.HandleInvalidArguments(cli)
+    except Exception as E :
+        return cli_helpers.HandleInvalidArguments(cli, E)
 
     if cli.IsConfigMode() :
         return HandleConfigCommand(cli)
@@ -309,18 +284,22 @@ def main():
         import socket
         socket.setdefaulttimeout(SOCKET_TIMEOUT_SECONDS)
         if use_ssl:
-            M = imaplib.IMAP4_SSL(host=host)
+            M = imaplib.IMAP4_SSL(host = host)
         else:
             M = imaplib.IMAP4(host)
     except Exception as e:
-        return HandleCannotConnectError(cli, e)
+        return cli_helpers.HandleCannotConnectError(cli,
+                    HandleMeasureCommand,
+                    "CRITICAL: Could not connect to %s: %s" % (host, e))
 
     timeprelogin = time.time()
 
     try:
         M.login(user, password)
     except Exception as e:
-        return HandleCannotLoginError(cli, e)
+        return cli_helpers.HandleCannotLoginError(cli,
+                    HandleMeasureCommand,
+                    "CRITICAL: IMAP Login not Successful: %s" % e)
 
     timepostlogin = time.time()
     connectDelay = (timeprelogin - timepreconnect) * 1000

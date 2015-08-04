@@ -6,8 +6,9 @@ import optparse # von Python 2.3 bis Python 2.6 (usage 'argparse' from Python 2.
 import os
 
 #---
-#--- Plugin
+#--- Plugin Stuff
 import nagios_stuff
+import munin_helpers
 
 #---
 class BaseCLI(object) :
@@ -44,6 +45,9 @@ class BaseCLI(object) :
     def IsConfigMode(self) :
         return 'config' in self._args
 
+    def IsVerbose(self) :
+        return self._options.verbose_output
+
     def GetUser(self) :
         return self.user
 
@@ -77,6 +81,14 @@ class BaseCLI(object) :
 
     def printUsage(self):
         self.parser.print_help()
+
+    def getLoginString(self) :
+        cli = self
+        user = cli.GetUser()
+        host = cli.GetHostname()
+        password = cli.GetPassword()
+        use_ssl = cli.ShouldUseSSL()
+        return "'%(user)s' with '%(password)s' --> '%(host)s'" % locals()
 
     def createParser(self) :
         usage = "usage: %prog [options] [config]"
@@ -112,7 +124,15 @@ class BaseCLI(object) :
                           dest = "use_ssl",
                           help = "secure connection with SSL/TLS",
                           action = "store_true",
-                          default = True)
+                          default = True,
+        )
+
+        parser.add_option("-v", "--verbose",
+                          dest = "verbose_output",
+                          help = "When active addtional information for human that are not consumable by Munin will be printed",
+                          action = "store_true",
+        )
+
         return parser
 
     def evaluate(self) :
@@ -130,11 +150,19 @@ class BaseCLI(object) :
             print "'%s' with '%s' -> '%s'" % (self.user, self.password, self.host)
 
 
-def HandleInvalidArguments(cli) :
+def HandleInvalidArguments(cli, E) :
     """
+    @param cli: Command Line Arguments
+    @type  cli: L{BaseCLI}
+
+    @param E: the raised Exception
+    @type  E: Exception
+
     @return: final exit code
     @rtype:  int
     """
+    if 1 :
+        print E
     cli.printUsage()
     return cli.MapNagiosReturnCode(nagios_stuff.NAGIOS_RC_UNKNOWN)
 
@@ -146,3 +174,28 @@ def HandleMissingArguments(cli) :
     """
     cli.printUsage()
     return cli.MapNagiosReturnCode(nagios_stuff.NAGIOS_RC_WARNING)
+
+
+def HandleCannotConnectError(cli, handleMeasureCommand, explanation) :
+    """
+    @return: final exit code
+    @rtype:  int
+    """
+    handleMeasureCommand(cli, munin_helpers.MUNIN_VALUE_CANNOT_CONNECT)
+    if 0 :
+        host = cli.GetHostname()
+        print explanation
+    return nagios_stuff.NAGIOS_RC_CRITICAL
+
+
+def HandleCannotLoginError(cli, handleMeasureCommand, explanation) :
+    """
+    @return: final exit code
+    @rtype:  int
+    """
+    if 1 :
+        print cli.getLoginString()
+    handleMeasureCommand(cli, munin_helpers.MUNIN_VALUE_CANNOT_LOGIN)
+    if 0  :
+        print explanation
+    return nagios_stuff.NAGIOS_RC_CRITICAL

@@ -31,6 +31,7 @@ import poplib
 #--- Plugin Stuff
 import cli_helpers
 import nagios_stuff
+import munin_helpers
 
 #---
 #--- Munin Constants (http://munin-monitoring.org/wiki/HowToWritePlugins)
@@ -38,10 +39,6 @@ import nagios_stuff
 MONITOR_GRAPH_TITLE = "POP3 login time"
 MONITOR_GRAPH_LABEL = "pop3_login_time"
 MONITOR_MEASURED_VARIABLE = "pop3_login_time"
-
-MUNIN_VALUE_CANNOT_LOGIN = -100.0
-MUNIN_VALUE_CANNOT_CONNECT = -200.0
-MUNIN_VALUE_MINIMUM = min(MUNIN_VALUE_CANNOT_LOGIN, MUNIN_VALUE_CANNOT_CONNECT)
 
 SOCKET_TIMEOUT_SECONDS = 5
 
@@ -72,28 +69,6 @@ class CLI(cli_helpers.BaseCLI) :
         if True :
             return 0
         return nagiosReturnCode
-
-def HandleCannotConnectError(cli, e) :
-    """
-    @return: final exit code
-    @rtype:  int
-    """
-    HandleMeasureCommand(cli, MUNIN_VALUE_CANNOT_CONNECT)
-    if 0 :
-        host = cli.GetHostname()
-        print "CRITICAL: POP3 Connection not Successful: %s" % e
-    return nagios_stuff.NAGIOS_RC_CRITICAL
-
-
-def HandleCannotLoginError(cli, e) :
-    """
-    @return: final exit code
-    @rtype:  int
-    """
-    HandleMeasureCommand(cli, MUNIN_VALUE_CANNOT_LOGIN)
-    if 0  :
-        print "CRITICAL: POP3 Login not Successful: %s" % e
-    return nagios_stuff.NAGIOS_RC_CRITICAL
 
 
 def HandleSuccessfulLogin(cli, conn, connectDelay, loginDelay) :
@@ -160,8 +135,8 @@ def main():
     cli = CLI.GetInstance()
     try:
         cli.evaluate()
-    except Exception :
-        return cli_helpers.HandleInvalidArguments(cli)
+    except Exception as E:
+        return cli_helpers.HandleInvalidArguments(cli, E)
 
     if cli.IsConfigMode() :
         return HandleConfigCommand(cli)
@@ -184,7 +159,9 @@ def main():
         else:
     	    M = poplib.POP3(host) # default port is 110
     except Exception as e:
-        return HandleCannotConnectError(cli, e)
+        return cli_helpers.HandleCannotConnectError(cli,
+                    HandleMeasureCommand,
+                    "CRITICAL: POP3 Connection not Successful: %s" % e)
 
     timeprelogin = time.time()
 
@@ -192,7 +169,9 @@ def main():
         M.user(user)
         M.pass_(password)
     except Exception as e:
-        return HandleCannotLoginError(cli, e)
+        return cli_helpers.HandleCannotLoginError(cli,
+                    HandleMeasureCommand,
+                    "CRITICAL: POP3 Login not Successful: %s" % e)
 
     timepostlogin = time.time()
     connectDelay = (timeprelogin - timepreconnect) * 1000
