@@ -6,6 +6,10 @@ import optparse # von Python 2.3 bis Python 2.6 (usage 'argparse' from Python 2.
 import os
 
 #---
+#--- Plugin
+import nagios_stuff
+
+#---
 class BaseCLI(object) :
 
     _SINGLETON_INSTANCE = None #: Singleton Pattern
@@ -124,3 +128,21 @@ class BaseCLI(object) :
 
         if 0 :
             print "'%s' with '%s' -> '%s'" % (self.user, self.password, self.host)
+
+
+def HandleInvalidArguments(cli) :
+    """
+    @return: final exit code
+    @rtype:  int
+    """
+    cli.printUsage()
+    return cli.MapNagiosReturnCode(nagios_stuff.NAGIOS_RC_UNKNOWN)
+
+
+def HandleMissingArguments(cli) :
+    """
+    @return: final exit code
+    @rtype:  int
+    """
+    cli.printUsage()
+    return cli.MapNagiosReturnCode(nagios_stuff.NAGIOS_RC_WARNING)

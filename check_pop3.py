@@ -161,7 +161,7 @@ def main():
     try:
         cli.evaluate()
     except Exception :
-        return HandleInvalidArguments(cli)
+        return cli_helpers.HandleInvalidArguments(cli)
 
     if cli.IsConfigMode() :
         return HandleConfigCommand(cli)
@@ -172,7 +172,7 @@ def main():
     use_ssl = cli.ShouldUseSSL()
 
     if user == None or password == None or host == None:
-        return HandleMissingArguments(cli)
+        return cli_helpers.HandleMissingArguments(cli)
 
     timepreconnect = time.time()
 
