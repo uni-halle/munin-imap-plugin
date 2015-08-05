@@ -4,6 +4,7 @@
 #--- Python
 import email
 import email.header
+import mail_helpers
 
 #---
 def iterMailboxNames(conn) :
@@ -59,8 +60,9 @@ def iterMailboxContent_sequentialID(conn, mbName) :
 
     for sid in reversed(sid_list) :
         mailResult, mailData = conn.fetch(sid, "(RFC822)") # feth the body
-        sid_raw_email = mailData[0][1]
-        yield (sid, raw_email)
+        rawMail = mailData[0][1]
+        emailObj = email.message_from_string(rawMail)
+        yield (sid, emailObj)
         break
 
 
@@ -75,8 +77,9 @@ def iterMailboxContent_uniqueID(conn, mbName) :
     uid_list = uidData[0].split()
     for uid in reversed(uid_list) :
         mailResult, mailData = conn.uid('fetch', uid, '(RFC822)')
-        raw_email = mailData[0][1]
-        yield (uid, raw_email)
+        rawMail = mailData[0][1]
+        emailObj = email.message_from_string(rawMail)
+        yield (uid, emailObj)
         break
 
 
@@ -118,10 +121,10 @@ def printMailboxesWithItemCount(conn) :
         attributeString = ", ".join(("'%s'" % an for an in sorted(attributeSet)))
         msgCount = msgCountList[0]
 
-	if 0 :        
+	if 0 :
 	    acl = M.myrights(mbNameEncoded) # works only with ACL
 
-        if 0 :        
+        if 0 :
             quotaRoots = M.getquotaroot(mbNameEncoded) # works only with QUOTA
 
         if 0 :
@@ -133,7 +136,6 @@ def printMailboxesWithItemCount(conn) :
             pass
 
         print "  %(mbDisplayName)-20s | %(msgCount)5s  | %(markerString)6s | %(specialUse)-11s | %(attributeString)s " % locals()
-
 
 
 def printMailboxesWithLatestMail(conn) :
@@ -153,25 +155,18 @@ def printMailboxesWithLatestMail(conn) :
         iterMailboxContent = iterMailboxContent_uniqueID
 	prettyMailbox = decodeMailboxName(mailbox)
 
-        for id, rawMail in iterMailboxContent(conn, mailbox) :
-            email_message = email.message_from_string(rawMail)
+        for id, emailObj in iterMailboxContent(conn, mailbox) :
+
 
             print "UID = %(id)s" % locals()
 
-            emailTo =email_message['To']
-            emailFrom = email.utils.parseaddr(email_message['From'])
-            
-	    for headerType, headerValueRaw in email_message.items() :
-                headerValueAndEncoding =  email.header.decode_header(headerValueRaw)
-                headerValue = headerValueAndEncoding[0][0]
-                headerEncoding = headerValueAndEncoding[0][1]
-                MAX_HEADER_LENGTH = 110
-                if len(headerValue) > MAX_HEADER_LENGTH :
-                    headerTrunc = headerValue[:MAX_HEADER_LENGTH-3] + '...'
-                else :
-                    headerTrunc = headerValue
+            #emailTo = emailObj['To']
+            #emailFrom = email.utils.parseaddr(emailObj['From'])
 
-                print "    %-20s %s" % (headerType, headerTrunc,)
+	    for headerType, headerTrunc in mail_helpers.iterEmailHeaders(emailObj, truncateAt = 70) :
+                if mail_helpers.IsBaseHeader(headerType) :
+                    headerDisplay = mail_helpers.RemoveLineBreaks(headerTrunc)
+                    print "    %-30s %s" % (headerType, headerDisplay,)
 
             if 0 :
                 # note that if you want to get text content (body) and the email contains
@@ -313,4 +308,3 @@ def printCapabilities(conn, capabilities) :
 #            print
 #            print xcapName
 #            print conn.xatom(xcapName)
-

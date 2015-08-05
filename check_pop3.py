@@ -32,6 +32,8 @@ import poplib
 import cli_helpers
 import nagios_stuff
 import munin_helpers
+import pop_helpers
+import mail_helpers
 
 #---
 #--- Munin Constants (http://munin-monitoring.org/wiki/HowToWritePlugins)
@@ -71,6 +73,18 @@ class CLI(cli_helpers.BaseCLI) :
         return nagiosReturnCode
 
 
+def printMailboxContent(conn) :
+    msgList = pop_helpers.listMessages(conn)
+    numMessages = len(msgList)
+    print "There are %i messages." % (numMessages,)
+    for (sid, emailObj) in pop_helpers.iterMessages(conn, msgList) :
+        #emailObj = email.message_from_string(rawMail)
+        for headerType, headerTrunc in mail_helpers.iterEmailHeaders(emailObj, truncateAt = 70) :
+            if mail_helpers.IsBaseHeader(headerType) :
+                headerDisplay = mail_helpers.RemoveLineBreaks(headerTrunc)
+                print "    %-30s %s" % (headerType, headerDisplay,)
+        print
+
 def HandleSuccessfulLogin(cli, conn, connectDelay, loginDelay) :
     """
     @param conn: the IMAP connection
@@ -85,17 +99,18 @@ def HandleSuccessfulLogin(cli, conn, connectDelay, loginDelay) :
     HandleMeasureCommand(cli, loginDelay)
     #HandleMeasureCommand(cli, connectDelayd)
 
-    if 0 :
-        M = conn
-        try:
-            numMessages = len(M.list()[1])
-        except Exception as e:
-            print "CRITICAL: POP3 Cannot retrieve stat: %s" % e
-            return nagios_stuff.NAGIOS_RC_CRITICAL
-        finally :
-            M.quit
+    import email.header
 
-        print "OK POP3 Login Successful. N messages: ", numMessages
+    if cli.IsVerbose() :
+        #try:
+        printMailboxContent(conn)
+        #except Exception as e:
+        #    print "CRITICAL: POP3 Cannot retrieve stat: %s" % e
+        #    return nagios_stuff.NAGIOS_RC_CRITICAL
+        #finally :
+        conn.quit
+        #print "OK POP3 Login Successful. N messages: ", numMessages
+
     return nagios_stuff.NAGIOS_RC_OK
 
 def HandleMeasureCommand(cli, theValue) :
@@ -167,7 +182,9 @@ def main():
 
     try:
         M.user(user)
+        # '+OK password required for user "xyz"'
         M.pass_(password)
+        # '+OK mailbox "xyz" has 5 messages (47919 octets) H migmx123'
     except Exception as e:
         return cli_helpers.HandleCannotLoginError(cli,
                     HandleMeasureCommand,
