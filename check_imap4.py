@@ -87,7 +87,7 @@ def HandleSuccessfulLogin(cli, conn, connectDelay, loginDelay) :
     HandleMeasureCommand(cli, loginDelay)
     #HandleMeasureCommand(cli, connectDelayd)
 
-    if 0 :
+    if cli.IsVerbose() :
         imap_helpers.printMailboxesWithItemCount(conn)
 
     if cli.IsVerbose() :

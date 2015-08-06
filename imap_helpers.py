@@ -14,6 +14,8 @@ def iterMailboxNames(conn) :
     """
     (listCode, listResult) = conn.list() # Unterschied zu IMAP4.lsub ?
     for mbString in listResult :
+        if mbString is None :
+            continue
         mbParts = mbString.split('"/"')
         mbNameWithQuotes = mbParts[-1].strip()
         firstPartStripped = mbParts[0].strip()
@@ -83,18 +85,23 @@ def iterMailboxContent_uniqueID(conn, mbName) :
         break
 
 
-
+def iterMailboxDisplayNames(conn) :
+    return (decodeMailboxName(mbNameEncoded)
+            for mbNameEncoded, markers in iterMailboxNames(conn))
 
 def printMailboxesWithItemCount(conn) :
     """
     List details for all mailboxes
     """
+    maxNameLen = max([20] + map(len, iterMailboxDisplayNames(conn)))
     print
-    print "  %-20s | #count | marked | SPECIAL-USE | other attributes" % ("Mailbox",)
+    headFormatString = "  %%-%is | #count | marked | SPECIAL-USE | other attributes" % (maxNameLen,)
+    lineFormatString="  %%(mbDisplayName)-%is | %%(msgCount)5s  | %%(markerString)6s | %%(specialUse)-11s | %%(attributeString)s " % (maxNameLen,)
+    print headFormatString % ("Mailbox",)
     print "  %s-+--------+--------+-%s-+-%s" % ("-"*20,"-"*11,"-"*20)
     for mbNameEncoded, markers in iterMailboxNames(conn) :
         mbDisplayName = decodeMailboxName(mbNameEncoded)
-        (okSelect, msgCountList) = conn.select(mbNameEncoded, readonly = True)
+        (Okselect, msgCountList) = conn.select(mbNameEncoded, readonly = True)
 
         isMarked = '\marked' in markers
         markerString = "MARKED" if isMarked else "  NO  "
@@ -135,7 +142,7 @@ def printMailboxesWithItemCount(conn) :
             checkResult = checkResultList[0]
             pass
 
-        print "  %(mbDisplayName)-20s | %(msgCount)5s  | %(markerString)6s | %(specialUse)-11s | %(attributeString)s " % locals()
+        print lineFormatString % locals()
 
 
 def printMailboxesWithLatestMail(conn) :
