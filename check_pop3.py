@@ -40,8 +40,9 @@ import mail_helpers
 
 MONITOR_GRAPH_TITLE = "POP3 login time"
 MONITOR_GRAPH_LABEL = "pop3_login_time"
-MONITOR_MEASURED_VARIABLE = "pop3_login_time"
+MONITOR_MEASURED_VARIABLE = "pop%(ssl)s_login_time_%(user)s_at_%(host)s"
 
+#---
 SOCKET_TIMEOUT_SECONDS = 5
 
 ENV_NAME_POP3_HOST = "POP3_HOST"
@@ -113,12 +114,25 @@ def HandleSuccessfulLogin(cli, conn, connectDelay, loginDelay) :
 
     return nagios_stuff.NAGIOS_RC_OK
 
+
+#---
+#--- Munin Format
+def getMuninVariableName(cli) :
+    host = cli.GetHostname().split(".")[0]
+    ssl = "s" if cli.ShouldUseSSL() else ""
+    user = cli.GetUser()
+    variableName = MONITOR_MEASURED_VARIABLE % locals()
+    return variableName
+
+
+#---
+#--- Munin-Inhalt
 def HandleMeasureCommand(cli, theValue) :
     """
     @return: final exit code
     @rtype:  int
     """
-    variableName = MONITOR_MEASURED_VARIABLE
+    variableName = getMuninVariableName(cli)
     print "%(variableName)s.value %(theValue).2f" % locals()
 
 
@@ -129,7 +143,7 @@ def HandleConfigCommand(cli) :
     """
     graphTitle = MONITOR_GRAPH_TITLE
     graphLabel = MONITOR_GRAPH_LABEL
-    variableName = MONITOR_MEASURED_VARIABLE
+    variableName = getMuninVariableName(cli)
     lowerLimit = MUNIN_VALUE_MINIMUM
 
     print "graph_title %(graphTitle)s" % locals()

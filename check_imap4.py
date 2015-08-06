@@ -38,7 +38,7 @@ import imap_helpers
 
 MONITOR_GRAPH_TITLE = "IMAP login time"
 MONITOR_GRAPH_LABEL = "imap_login_time"
-MONITOR_MEASURED_VARIABLE = "imap_login_time"
+MONITOR_MEASURED_VARIABLE = "imap%(ssl)s_login_time_%(user)s_at_%(host)s"
 
 #---
 SOCKET_TIMEOUT_SECONDS = 5
@@ -96,12 +96,25 @@ def HandleSuccessfulLogin(cli, conn, connectDelay, loginDelay) :
     conn.logout()
     return cli.MapNagiosReturnCode(nagios_stuff.NAGIOS_RC_OK)
 
+
+#---
+#--- Munin-Format
+def getMuninVariableName(cli) :
+    host = cli.GetHostname().split(".")[0]
+    ssl = "s" if cli.ShouldUseSSL() else ""
+    user = cli.GetUser()
+    variableName = MONITOR_MEASURED_VARIABLE % locals()
+    return variableName
+
+
+#---
+#--- Munin-Inhalt
 def HandleMeasureCommand(cli, theValue) :
     """
     @return: final exit code
     @rtype:  int
     """
-    variableName = MONITOR_MEASURED_VARIABLE
+    variableName = getMuninVariableName(cli)
     print "%(variableName)s.value %(theValue).2f" % locals()
 
 
@@ -112,7 +125,7 @@ def HandleConfigCommand(cli) :
     """
     graphTitle = MONITOR_GRAPH_TITLE
     graphLabel = MONITOR_GRAPH_LABEL
-    variableName = MONITOR_MEASURED_VARIABLE
+    variableName = getMuninVariableName(cli)
     lowerLimit = munin_helpers.MUNIN_VALUE_MINIMUM
 
     print "graph_title %(graphTitle)s" % locals()
