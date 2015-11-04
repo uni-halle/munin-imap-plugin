@@ -36,18 +36,12 @@ import imap_helpers
 #---
 #--- Munin Constants (http://munin-monitoring.org/wiki/HowToWritePlugins)
 
-MONITOR_GRAPH_TITLE = "IMAP login time"
-MONITOR_GRAPH_LABEL = "imap_login_time"
-MONITOR_MEASURED_VARIABLE = "imap%(ssl)s_login_time_%(user)s_at_%(host)s"
+MONITOR_GRAPH_TITLE = "IMAP-POP-OFFSET regarding latest mail"
+MONITOR_GRAPH_LABEL = "imap_minus_pop"
+MONITOR_MEASURED_VARIABLE = "imap%(ssl)s_minus_pop%(ssl)s_%(user)s_at_%(host)s"
 
 #---
 SOCKET_TIMEOUT_SECONDS = 5
-
-#---
-ENV_NAME_IMAP_HOST = "IMAP_HOST"
-ENV_NAME_POP3_HOST = "POP3_HOST"
-ENV_NAME_IMAP_PASS = "RECEIVING_PASSWORD"
-ENV_NAME_IMAP_USER = "RECEIVING_USERNAME"
 
 #---
 class CLI(cli_helpers.BaseCLI) :
@@ -68,34 +62,49 @@ class CLI(cli_helpers.BaseCLI) :
         return nagiosReturnCode
 
 
-def HandleSuccessfulLogin(cli, conn, connectDelay, loginDelay) :
+def HandleSuccessfulLogin(cli, connImapTriple, connPopTriple) :
     """
-    @param conn: the IMAP connection
+    @param connImapTriple: (conn, connectDelay, loginDelay) the IMAP connection
+    @type  connImapTriple: (???, float, float)
 
-    @param connectDelay, loginDelay: Timing
-    @type  connectDelay, loginDelay: float
+    @param connPopTriple:  (conn, connectDelay, loginDelay) the POP3 connection
+    @type  connPopTriple: (???, float, float)
 
     @return: final exit code
     @rtype:  int
     """
 
-    HandleMeasureCommand(cli, loginDelay)
-    #HandleMeasureCommand(cli, connectDelayd)
+    (iConn, iConnectDelay, iLoginDelay) = connImapTriple
+    (pConn, pConnectDelay, pLoginDelay) = connPopTriple
 
+
+    # IMAP
     if cli.IsVerbose() :
-        imap_helpers.printMailboxesWithItemCount(conn)
+        imap_helpers.printMailboxesWithItemCount(iConn)
+        imap_helpers.printMailboxesWithLatestMail(iConn)
 
-    if cli.IsVerbose() :
-        imap_helpers.printMailboxesWithLatestMail(conn)
+    # POP
+    if 1 :
+        # todo
+        pass
 
-    conn.logout()
+    theValue = iLoginDelay
+    # theValue = iConnectDelayd
+
+    HandleMeasureCommand(cli, theValue)
+
+    # logout
+    for conn in [iConn, pConn] :
+        conn.logout()
+
     return cli.MapNagiosReturnCode(nagios_stuff.NAGIOS_RC_OK)
 
 
 #---
 #--- Munin-Format
 def getMuninVariableName(cli) :
-    host = cli.GetHostname().split(".")[0]
+    fullhost = cli.GetHostname()
+    host = fullhost.split(".")[0]
     ssl = "s" if cli.ShouldUseSSL() else ""
     user = cli.GetUser()
     variableName = MONITOR_MEASURED_VARIABLE % locals()
@@ -136,6 +145,83 @@ def HandleConfigCommand(cli) :
     print "%(variableName)s.label %(graphLabel)s" % locals()
     return 0
 
+def GetImapConnection(cli, host, user, password, use_ssl) :
+    DO_RAISE = True
+
+    timepreconnect = time.time()
+
+    try:
+        import socket
+        socket.setdefaulttimeout(SOCKET_TIMEOUT_SECONDS)
+        if use_ssl:
+            M = imaplib.IMAP4_SSL(host = host)
+        else:
+            M = imaplib.IMAP4(host)
+    except Exception as e:
+        if DO_RAISE :
+            raise
+        rc = cli_helpers.HandleCannotConnectError(cli,
+                    HandleMeasureCommand,
+                    "CRITICAL: Could not connect to %s: %s" % (host, e))
+        return None
+
+    timeprelogin = time.time()
+
+    try:
+        M.login(user, password)
+    except Exception as e:
+        if DO_RAISE :
+            raise
+        rc = cli_helpers.HandleCannotLoginError(cli,
+                    HandleMeasureCommand,
+                    "CRITICAL: IMAP Login not Successful: %s" % e)
+        return None
+
+    timepostlogin = time.time()
+    connectDelay = (timeprelogin - timepreconnect) * 1000
+    loginDelay = (timepostlogin - timeprelogin) * 1000
+
+    return (M, connectDelay, loginDelay)
+
+
+def GetPopConnection(cli, host, user, password, use_ssl) :
+    DO_RAISE = True
+
+    timepreconnect = time.time()
+
+    try:
+        import socket
+        socket.setdefaulttimeout(SOCKET_TIMEOUT_SECONDS)
+        if use_ssl:
+            M = poplib.POP3_SSL(host=host) # default port is 995
+        else:
+    	    M = poplib.POP3(host) # default port is 110
+    except Exception as e:
+        if DO_RAISE :
+            raise
+        rc = cli_helpers.HandleCannotConnectError(cli,
+                    HandleMeasureCommand,
+                    "CRITICAL: Could not connect to %s: %s" % (host, e))
+        return None
+
+    timeprelogin = time.time()
+
+    try:
+        M.user(user)
+        # '+OK password required for user "xyz"'
+        M.pass_(password)
+        # '+OK mailbox "xyz" has 5 messages (47919 octets) H migmx123'
+    except Exception as e:
+        return cli_helpers.HandleCannotLoginError(cli,
+                    HandleMeasureCommand,
+                    "CRITICAL: POP3 Login not Successful: %s" % e)
+
+    timepostlogin = time.time()
+    connectDelay = (timeprelogin - timepreconnect) * 1000
+    loginDelay = (timepostlogin - timeprelogin) * 1000
+
+    return (M, connectDelay, loginDelay)
+
 
 def main():
 
@@ -153,42 +239,27 @@ def main():
     if cli.IsConfigMode() :
         return HandleConfigCommand(cli)
 
-    user = cli.GetUser()
-    host = cli.GetHostname()
-    password = cli.GetPassword()
-    use_ssl = cli.ShouldUseSSL()
 
-    if user == None or password == None or host == None:
+    user = cli.GetUser()
+    imaphost = os.environ.get('IMAP_HOST', None)
+    pop3host = os.environ.get('POP3_HOST', None)
+    password = cli.GetPassword()
+
+
+    if None in [user, password, imaphost, pop3host] :
         return cli_helpers.HandleMissingArguments(cli)
 
-    timepreconnect = time.time()
+    use_ssl = cli.ShouldUseSSL()
 
-    try:
-        import socket
-        socket.setdefaulttimeout(SOCKET_TIMEOUT_SECONDS)
-        if use_ssl:
-            M = imaplib.IMAP4_SSL(host = host)
-        else:
-            M = imaplib.IMAP4(host)
-    except Exception as e:
-        return cli_helpers.HandleCannotConnectError(cli,
-                    HandleMeasureCommand,
-                    "CRITICAL: Could not connect to %s: %s" % (host, e))
+    connImapTriple = GetImapConnection(cli, imaphost, user, password, use_ssl)
+    if connImapTriple is None :
+        return None
 
-    timeprelogin = time.time()
+    connPopTriple = GetImapConnection(cli, pop3host, user, password, use_ssl)
+    if connPopTriple is None :
+        return None
 
-    try:
-        M.login(user, password)
-    except Exception as e:
-        return cli_helpers.HandleCannotLoginError(cli,
-                    HandleMeasureCommand,
-                    "CRITICAL: IMAP Login not Successful: %s" % e)
-
-    timepostlogin = time.time()
-    connectDelay = (timeprelogin - timepreconnect) * 1000
-    loginDelay = (timepostlogin - timeprelogin) * 1000
-
-    return HandleSuccessfulLogin(cli, M, connectDelay, loginDelay)
+    return HandleSuccessfulLogin(cli, connImapTriple, connPopTriple)
 
 if __name__ == "__main__":
     retCode = main()

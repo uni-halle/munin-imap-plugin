@@ -45,10 +45,6 @@ MONITOR_MEASURED_VARIABLE = "pop%(ssl)s_login_time_%(user)s_at_%(host)s"
 #---
 SOCKET_TIMEOUT_SECONDS = 5
 
-ENV_NAME_POP3_HOST = "POP3_HOST"
-ENV_NAME_POP3_PASS = "POP3_PASSWORD"
-ENV_NAME_POP3_USER = "POP3_USER"
-
 #---
 class CLI(cli_helpers.BaseCLI) :
 
@@ -175,7 +171,7 @@ def main():
     password = cli.GetPassword()
     use_ssl = cli.ShouldUseSSL()
 
-    if user == None or password == None or host == None:
+    if None in [user, password, host] :
         return cli_helpers.HandleMissingArguments(cli)
 
     timepreconnect = time.time()

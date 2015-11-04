@@ -44,11 +44,6 @@ MONITOR_MEASURED_VARIABLE = "imap%(ssl)s_login_time_%(user)s_at_%(host)s"
 SOCKET_TIMEOUT_SECONDS = 5
 
 #---
-ENV_NAME_IMAP_HOST = "IMAP_HOST"
-ENV_NAME_IMAP_PASS = "IMAP_PASSWORD"
-ENV_NAME_IMAP_USER = "IMAP_USER"
-
-#---
 class CLI(cli_helpers.BaseCLI) :
 
     _SINGLETON_INSTANCE = None #: Singleton Pattern
@@ -157,7 +152,7 @@ def main():
     password = cli.GetPassword()
     use_ssl = cli.ShouldUseSSL()
 
-    if user == None or password == None or host == None:
+    if None in [user, password, host] :
         return cli_helpers.HandleMissingArguments(cli)
 
     timepreconnect = time.time()
