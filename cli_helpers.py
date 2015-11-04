@@ -15,18 +15,20 @@ class BaseCLI(object) :
 
     _SINGLETON_INSTANCE = None #: Singleton Pattern
 
-    def __init__(self, userVar, passwordVar, hostnameVar) :
+    def __init__(self, **keywords) :
 	"""
-	@param userVar, passwordVar, hostnameVar: Name of the
+	@keyword usernameVar, passwordVar: Name of the
 	    environment variables holding the user credentials and the
 	    hostname of the service under test.
-	@type  userVar, passwordVar, hostnameVar: str
+	@type    usernameVar, passwordVar: str
+
+        @keyword hostname: default value for server hostname
+        @type    hostname: str
 	"""
 
 	# Names of some environment variables
-	self._ENV_NAME_USER = userVar
-	self._ENV_NAME_PASS = passwordVar
-	self._ENV_NAME_HOST = hostnameVar
+	self._ENV_NAME_USER = keywords.get('usernameVar', None)
+	self._ENV_NAME_PASS = keywords.get('passwordVar', None)
 
         self._options = None
         self._args = None
@@ -38,7 +40,7 @@ class BaseCLI(object) :
         # take default values from environment variables
         self.defaultUsername = os.environ.get(self._ENV_NAME_USER, None)
         self.defaultPassword = os.environ.get(self._ENV_NAME_PASS, None)
-        self.defaultHostname = os.environ.get(self._ENV_NAME_HOST, None)
+        self.defaultHostname = keywords.get('hostname', None)
 
         self.parser = self.createParser()
 
@@ -74,9 +76,18 @@ class BaseCLI(object) :
         return nagiosReturnCode
 
     @classmethod
-    def GetInstance(cls) :
+    def GetInstance(cls, **keywords) :
+	"""
+	@keyword usernameVar, passwordVar: Name of the
+	    environment variables holding the user credentials and the
+	    hostname of the service under test.
+	@type    usernameVar, passwordVar: str
+
+        @keyword hostname: default value for server hostname
+        @type    hostname: str
+	"""
         if cls._SINGLETON_INSTANCE is None :
-            cls._SINGLETON_INSTANCE = cls()
+            cls._SINGLETON_INSTANCE = cls(**keywords)
         return cls._SINGLETON_INSTANCE
 
     def printUsage(self):
@@ -113,7 +124,7 @@ class BaseCLI(object) :
 
         parser.add_option("-H", "--host",
                           dest = "host",
-                          help = "Login on HOST. If not specified content of environment variable '%s' will be used." % (self._ENV_NAME_HOST,),
+                          help = "Login on HOST.",
                           action = "store",
                           type = "string",
                           metavar = "HOST",

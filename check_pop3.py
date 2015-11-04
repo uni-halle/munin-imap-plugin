@@ -54,11 +54,6 @@ class CLI(cli_helpers.BaseCLI) :
 
     _SINGLETON_INSTANCE = None #: Singleton Pattern
 
-    def __init__(self) :
-        cli_helpers.BaseCLI.__init__(self,
-                                     ENV_NAME_POP3_USER,
-                                     ENV_NAME_POP3_PASS,
-                                     ENV_NAME_POP3_HOST)
 
     def MapNagiosReturnCode(self, nagiosReturnCode) :
         """
@@ -161,7 +156,12 @@ def HandleConfigCommand(cli) :
 
 def main():
 
-    cli = CLI.GetInstance()
+    defaultHostname = os.environ.get('IMAP_HOST', None)
+
+    cli = CLI.GetInstance(hostname = defaultHostname,
+                          usernameVar = 'RECEIVING_USERNAME',
+                          passwordVar = 'RECEIVING_PASSWORD')
+
     try:
         cli.evaluate()
     except Exception as E:

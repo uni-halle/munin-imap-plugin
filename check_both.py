@@ -45,8 +45,9 @@ SOCKET_TIMEOUT_SECONDS = 5
 
 #---
 ENV_NAME_IMAP_HOST = "IMAP_HOST"
-ENV_NAME_IMAP_PASS = "IMAP_PASSWORD"
-ENV_NAME_IMAP_USER = "IMAP_USER"
+ENV_NAME_POP3_HOST = "POP3_HOST"
+ENV_NAME_IMAP_PASS = "RECEIVING_PASSWORD"
+ENV_NAME_IMAP_USER = "RECEIVING_USERNAME"
 
 #---
 class CLI(cli_helpers.BaseCLI) :
@@ -137,13 +138,10 @@ def HandleConfigCommand(cli) :
 
 
 def main():
-
     defaultHostname = os.environ.get('IMAP_HOST', None)
-
     cli = CLI.GetInstance(hostname = defaultHostname,
                           usernameVar = 'RECEIVING_USERNAME',
                           passwordVar = 'RECEIVING_PASSWORD')
-
     try:
         cli.evaluate()
     except Exception as E :
