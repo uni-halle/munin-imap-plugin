@@ -38,20 +38,9 @@ import imap_helpers
 SOCKET_TIMEOUT_SECONDS = 5
 
 #---
-ENV_NAME_IMAP_HOST = "IMAP_HOST"
-ENV_NAME_IMAP_PASS = "IMAP_PASSWORD"
-ENV_NAME_IMAP_USER = "IMAP_USER"
-
-#---
 class CLI(cli_helpers.BaseCLI) :
 
     _SINGLETON_INSTANCE = None #: Singleton Pattern
-
-    def __init__(self) :
-        cli_helpers.BaseCLI.__init__(self,
-                                     ENV_NAME_IMAP_USER,
-                                     ENV_NAME_IMAP_PASS,
-                                     ENV_NAME_IMAP_HOST)
 
     def ShouldPrintCapabilities(self) :
         return True
@@ -138,7 +127,12 @@ def HandleSuccessfulLogin(cli, conn, connectDelay, loginDelay) :
 
 def main():
 
-    cli = CLI.GetInstance()
+    defaultHostname = os.environ.get('IMAP_HOST', None)
+
+    cli = CLI.GetInstance(hostname = defaultHostname,
+                          usernameVar = 'RECEIVING_USERNAME',
+                          passwordVar = 'RECEIVING_PASSWORD')
+
     try:
         cli.evaluate()
     except getopt.GetoptError:
