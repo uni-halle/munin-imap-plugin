@@ -138,10 +138,13 @@ def HandleConfigCommand(cli) :
 
 
 def main():
+
     defaultHostname = os.environ.get('IMAP_HOST', None)
+
     cli = CLI.GetInstance(hostname = defaultHostname,
                           usernameVar = 'RECEIVING_USERNAME',
                           passwordVar = 'RECEIVING_PASSWORD')
+
     try:
         cli.evaluate()
     except Exception as E :
