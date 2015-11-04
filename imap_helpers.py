@@ -96,7 +96,7 @@ def printMailboxesWithItemCount(conn) :
     maxNameLen = max([20] + map(len, iterMailboxDisplayNames(conn)))
     print
     headFormatString = "  %%-%is | #count | marked | SPECIAL-USE | other attributes" % (maxNameLen,)
-    lineFormatString="  %%(mbDisplayName)-%is | %%(msgCount)5s  | %%(markerString)6s | %%(specialUse)-11s | %%(attributeString)s " % (maxNameLen,)
+    lineFormatString = "  %%(mbDisplayName)-%is | %%(msgCount)5s  | %%(markerString)6s | %%(specialUse)-11s | %%(attributeString)s " % (maxNameLen,)
     print headFormatString % ("Mailbox",)
     print "  %s-+--------+--------+-%s-+-%s" % ("-"*20,"-"*11,"-"*20)
     for mbNameEncoded, markers in iterMailboxNames(conn) :

@@ -1,8 +1,8 @@
 #!/bin/bash
 
-export IMAP_USER=upom10
-export IMAP_PASSWORD=upom10pw
-export IMAP_HOST=mail.uni-halle.de
+export IMAP_USER=username
+export IMAP_PASSWORD=password
+export IMAP_HOST=hostname
 
 python check_imap4.py
 
