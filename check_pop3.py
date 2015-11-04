@@ -68,7 +68,7 @@ class CLI(cli_helpers.BaseCLI) :
 def printMailboxContent(conn) :
     msgList = pop_helpers.listMessages(conn)
     numMessages = len(msgList)
-    print "There are %i messages." % (numMessages,)
+    print "There are %i messages (via POP)." % (numMessages,)
     for (sid, emailObj) in pop_helpers.iterMessages(conn, msgList) :
         #emailObj = email.message_from_string(rawMail)
         for headerType, headerTrunc in mail_helpers.iterEmailHeaders(emailObj, truncateAt = 70) :

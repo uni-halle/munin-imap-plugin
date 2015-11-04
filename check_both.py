@@ -25,13 +25,16 @@ import time
 #---
 #--- Python (Mail)
 import imaplib
+import poplib
 
 #---
 #--- Plugin Stuff
 import cli_helpers
-import nagios_stuff
-import munin_helpers
 import imap_helpers
+import mail_helpers
+import munin_helpers
+import nagios_stuff
+import pop_helpers
 
 #---
 #--- Munin Constants (http://munin-monitoring.org/wiki/HowToWritePlugins)
@@ -84,9 +87,9 @@ def HandleSuccessfulLogin(cli, connImapTriple, connPopTriple) :
         imap_helpers.printMailboxesWithLatestMail(iConn)
 
     # POP
-    if 1 :
-        # todo
-        pass
+    if cli.IsVerbose() :
+        printPopMailboxContent(pConn)
+
 
     theValue = iLoginDelay
     # theValue = iConnectDelayd
@@ -94,8 +97,8 @@ def HandleSuccessfulLogin(cli, connImapTriple, connPopTriple) :
     HandleMeasureCommand(cli, theValue)
 
     # logout
-    for conn in [iConn, pConn] :
-        conn.logout()
+    iConn.logout()
+    pConn.quit()
 
     return cli.MapNagiosReturnCode(nagios_stuff.NAGIOS_RC_OK)
 
@@ -222,6 +225,18 @@ def GetPopConnection(cli, host, user, password, use_ssl) :
 
     return (M, connectDelay, loginDelay)
 
+def printPopMailboxContent(conn) :
+    msgList = pop_helpers.listMessages(conn)
+    numMessages = len(msgList)
+    print "There are %i messages (via POP)." % (numMessages,)
+    print msgList
+    for (sid, emailObj) in pop_helpers.iterMessages(conn, msgList) :
+        #emailObj = email.message_from_string(rawMail)
+        for headerType, headerTrunc in mail_helpers.iterEmailHeaders(emailObj, truncateAt = 70) :
+            if mail_helpers.IsBaseHeader(headerType) :
+                headerDisplay = mail_helpers.RemoveLineBreaks(headerTrunc)
+                print "    %-30s %s" % (headerType, headerDisplay,)
+        print
 
 def main():
 
@@ -255,7 +270,7 @@ def main():
     if connImapTriple is None :
         return None
 
-    connPopTriple = GetImapConnection(cli, pop3host, user, password, use_ssl)
+    connPopTriple = GetPopConnection(cli, pop3host, user, password, use_ssl)
     if connPopTriple is None :
         return None
 
