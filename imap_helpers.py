@@ -48,10 +48,25 @@ def decodeMailboxName(mbNameEncoded) :
         mbName = mbName.replace(fromString, toString)
     return mbName.decode('utf-8')
 
-
-
-def iterMailboxContent_sequentialID(conn, mbName) :
+def iterMailboxContent(conn, mbName, **keywords) :
     """
+    @keyword uniqueIdentifier: If True (default) use UID instead of sequentialID
+    @type    uniqueIdentifier: bool
+
+    @keyword newestFirst: If True sort from newest to oldest. Default is False
+    @type    newestFirst: bool
+    """
+    useUID = keywords.get('uniqueIdentifier', True)
+    f = iterMailboxContent_uniqueID if useUID else iterMailboxContent_sequentialID
+    for item in f(conn, mbName, **keywords) :
+        yield item
+
+
+def iterMailboxContent_sequentialID(conn, mbName, **keywords) :
+    """
+    @keyword newestFirst: If True sort from newest to oldest. Default is False
+    @type    newestFirst: bool
+
     @precondition: Mailbox must be SELECTED
     @return: generator[(id, rawMail)]
     """
@@ -60,28 +75,46 @@ def iterMailboxContent_sequentialID(conn, mbName) :
     sid_string = sidData[0]
     sid_list = sid_string.split() # separated by SPACE
 
-    for sid in reversed(sid_list) :
+    # order by date
+    newestFirst = keywords.get('newestFirst', False)
+    if newestFirst :
+        sidIterator = reversed(sid_list)
+    else :
+        sidIterator = sid_list
+
+    for sid in sidIterator :
         mailResult, mailData = conn.fetch(sid, "(RFC822)") # feth the body
         rawMail = mailData[0][1]
         emailObj = email.message_from_string(rawMail)
-        yield (sid, emailObj)
+        yield ("sid.%s" % (sid,), emailObj)
         break
 
 
 
-def iterMailboxContent_uniqueID(conn, mbName) :
+def iterMailboxContent_uniqueID(conn, mbName, **keywords) :
     """
+    @keyword newestFirst: If True sort from newest to oldest. Default is False
+    @type    newestFirst: bool
+
     @precondition: Mailbox must be SELECTED
     @return: generator[(id, rawMail)]
     """
     # Unique IDs (UID)
     uidResult, uidData = conn.uid('search', None, "ALL")
     uid_list = uidData[0].split()
-    for uid in reversed(uid_list) :
+
+    # order by date
+    newestFirst = keywords.get('newestFirst', False)
+    if newestFirst :
+        uidIterator = reversed(uid_list)
+    else :
+        uidIterator = uid_list
+
+    for uid in uidIterator :
         mailResult, mailData = conn.uid('fetch', uid, '(RFC822)')
         rawMail = mailData[0][1]
         emailObj = email.message_from_string(rawMail)
-        yield (uid, emailObj)
+        yield ("uid.%s" % (uid,), emailObj)
         break
 
 
@@ -145,52 +178,62 @@ def printMailboxesWithItemCount(conn) :
         print lineFormatString % locals()
 
 
-def printMailboxesWithLatestMail(conn) :
+def printMailboxesWithLatestMail(conn, **keywords) :
     """
     Prints all mailboxes with the lates message on top
 
     Inspired by:
     https://yuji.wordpress.com/2011/06/22/python-imaplib-imap-example-with-gmail/
+
+    @keyword unique: If True (default) use UID instead of sequentialID
+    @type    unique: bool
     """
     for mailbox, markers in iterMailboxNames(conn) :
-        (okSelect, msgCountList) = conn.select(mailbox, readonly = True)
-	mailboxPretty = decodeMailboxName(mailbox)
-
-        print "%(mailboxPretty)s" % locals()
-
-        #iterMailboxContent = iterMailboxContent_sequentialID
-        iterMailboxContent = iterMailboxContent_uniqueID
-	prettyMailbox = decodeMailboxName(mailbox)
-
-        for id, emailObj in iterMailboxContent(conn, mailbox) :
+        printMailboxContent(conn, mailbox, **keywords)
 
 
-            print "UID = %(id)s" % locals()
 
-            #emailTo = emailObj['To']
-            #emailFrom = email.utils.parseaddr(emailObj['From'])
+def printMailboxContent(conn, mailbox, **keywords) :
+    """
+    @keyword uniqueIdentifier: If True (default) use UID instead of sequentialID
+    @type    uniqueIdentifier: bool
 
-	    for headerType, headerTrunc in mail_helpers.iterEmailHeaders(emailObj, truncateAt = 70) :
-                if mail_helpers.IsBaseHeader(headerType) :
-                    headerDisplay = mail_helpers.RemoveLineBreaks(headerTrunc)
-                    print "    %-30s %s" % (headerType, headerDisplay,)
+    @keyword newestFirst: If True sort from newest to oldest. Default is False
+    @type    newestFirst: bool
+    """
+    (okSelect, msgCountList) = conn.select(mailbox, readonly = True)
+    mailboxPretty = decodeMailboxName(mailbox)
 
-            if 0 :
-                # note that if you want to get text content (body) and the email contains
-                # multiple payloads (plaintext/ html), you must parse each message separately.
-                # use something like the following: (taken from a stackoverflow post)
-                def get_first_text_block(self, email_message_instance):
-                    maintype = email_message_instance.get_content_maintype()
-                    if maintype == 'multipart':
-                        for part in email_message_instance.get_payload():
-                            if part.get_content_maintype() == 'text':
-                                return part.get_payload()
-                    elif maintype == 'text':
-                        return email_message_instance.get_payload()
+    print "%(mailboxPretty)s" % locals()
+    prettyMailbox = decodeMailboxName(mailbox)
+
+    for id, emailObj in iterMailboxContent(conn, mailbox, **keywords) :
+        print "ID = %(id)s" % locals()
+
+        #emailTo = emailObj['To']
+        #emailFrom = email.utils.parseaddr(emailObj['From'])
+
+	for headerType, headerTrunc in mail_helpers.iterEmailHeaders(emailObj, truncateAt = 70) :
+            if mail_helpers.IsBaseHeader(headerType) :
+                headerDisplay = mail_helpers.RemoveLineBreaks(headerTrunc)
+                print "    %-30s %s" % (headerType, headerDisplay,)
+                pass
+            continue
+
+        if 0 :
+            # note that if you want to get text content (body) and the email contains
+            # multiple payloads (plaintext/ html), you must parse each message separately.
+            # use something like the following: (taken from a stackoverflow post)
+            def get_first_text_block(self, email_message_instance):
+                maintype = email_message_instance.get_content_maintype()
+                if maintype == 'multipart':
+                    for part in email_message_instance.get_payload():
+                        if part.get_content_maintype() == 'text':
+                            return part.get_payload()
+                elif maintype == 'text':
+                    return email_message_instance.get_payload()
 
             print
-        print
-
 
 
 

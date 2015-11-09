@@ -80,15 +80,19 @@ def HandleSuccessfulLogin(cli, connImapTriple, connPopTriple) :
     (iConn, iConnectDelay, iLoginDelay) = connImapTriple
     (pConn, pConnectDelay, pLoginDelay) = connPopTriple
 
+    newestFirst = True
 
     # IMAP
     if cli.IsVerbose() :
-        imap_helpers.printMailboxesWithItemCount(iConn)
-        imap_helpers.printMailboxesWithLatestMail(iConn)
+        #imap_helpers.printMailboxesWithItemCount(iConn)
+        #imap_helpers.printMailboxesWithLatestMail(iConn)
+        imap_helpers.printMailboxContent(iConn, 'INBOX',
+                                         uniqueIdentifier = True,
+                                         newestFirst = newestFirst)
 
     # POP
     if cli.IsVerbose() :
-        printPopMailboxContent(pConn)
+        printPopMailboxContent(pConn, newestFirst = newestFirst)
 
 
     theValue = iLoginDelay
@@ -225,18 +229,62 @@ def GetPopConnection(cli, host, user, password, use_ssl) :
 
     return (M, connectDelay, loginDelay)
 
-def printPopMailboxContent(conn) :
+def printPopMailboxContent(conn, **keywords) :
+    """
+    @keyword newestFirst: If True sort from newest to oldest. Default is False
+    @type    newestFirst: bool
+    """
     msgList = pop_helpers.listMessages(conn)
     numMessages = len(msgList)
     print "There are %i messages (via POP)." % (numMessages,)
-    print msgList
-    for (sid, emailObj) in pop_helpers.iterMessages(conn, msgList) :
-        #emailObj = email.message_from_string(rawMail)
-        for headerType, headerTrunc in mail_helpers.iterEmailHeaders(emailObj, truncateAt = 70) :
-            if mail_helpers.IsBaseHeader(headerType) :
-                headerDisplay = mail_helpers.RemoveLineBreaks(headerTrunc)
-                print "    %-30s %s" % (headerType, headerDisplay,)
+    lastMailObj = None
+
+    for (sid, emailObj) in pop_helpers.iterMessages(conn, msgList, **keywords) :
+        if 0 :
+            print "SID = %r" % (sid,)
+            for headerType, headerTrunc in mail_helpers.iterEmailHeaders(emailObj, truncateAt = 70) :
+                if mail_helpers.IsBaseHeader(headerType) :
+                    headerDisplay = mail_helpers.RemoveLineBreaks(headerTrunc)
+                    print "    %-30s %s" % (headerType, headerDisplay,)
+            print
+
+
+        lastMailObj = emailObj
+        break
+
+    # show informatinos of the last (=newest) mail
+    if lastMailObj is not None :
+        print "DATE    =", lastMailObj["DATE"]
+        print "SUBJECT =", lastMailObj["SUBJECT"]
+        print "FROM    =", lastMailObj["FROM"]
+        print "  multipart", lastMailObj.is_multipart()
+        print "  unixfrom", lastMailObj.get_unixfrom()
+        print "  charset", lastMailObj.get_charset()
+        print "  contentType", lastMailObj.get_charset()
+        print "  boundary =", lastMailObj.get_boundary()
         print
+        pass
+
+    # print all parts of a multipart mail
+    if 0 and lastMailObj is not None :
+        for (i, msg) in enumerate(lastMailObj.get_payload()) :
+            print "PART", i
+            print "  charset =", msg.get_charset()
+            print "  contentType =", msg.get_content_type()
+            print "  contentMainType =", msg.get_content_maintype()
+            print "  contentSubType =", msg.get_content_subtype()
+            print "  defaultType =", msg.get_default_type()
+            print "  filename =", msg.get_filename()
+            print "  boundary =", msg.get_boundary()
+            print "  contentCharset =", msg.get_content_charset()
+            print "  charsets =", msg.get_charsets()
+            print
+            print "  <CONTENT>"
+            print msg.as_string()
+            print "  </CONTENT>"
+            print
+
+        pass
 
 def main():
 

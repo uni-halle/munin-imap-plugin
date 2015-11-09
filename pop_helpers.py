@@ -17,12 +17,26 @@ def listMessages(conn) :
 
     return list(p.split(' ') for p in msgList)
 
-def iterMessages(conn, msgList) :
+def iterMessages(conn, msgList, **keywords) :
     """
-    @param: result from L{listMessages}
+    @param msgList: result from L{listMessages}
+
+    @keyword newestFirst: If True sort from newest to oldest. Default is False
+    @type    newestFirst: bool
     """
     numMessages = msgList # len(M.list()[1])
-    for (sid, msgSize) in msgList :
+
+    # order by date
+    reverseFlag = keywords.get('newestFirst', False)
+    if reverseFlag :
+        # newest first
+        msgIterator = reversed(msgList)
+
+    else :
+        # oldest first
+        msgIterator = msgList
+
+    for (sid, msgSize) in msgIterator :
         responseTuple = conn.retr(sid) # (response, ['line', ...], octets).
         # ('+OK', ['Return-Path: prvs=06403...', ..., '...'], 4382])
         success = responseTuple[0]
