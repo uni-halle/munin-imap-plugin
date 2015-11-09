@@ -2,9 +2,10 @@
 
 #---
 #--- Python
+import datetime
 import email
 import email.header
-
+import re
 
 #---
 def iterEmailHeaders(emailObj, **keywords) :
@@ -37,6 +38,49 @@ def iterEmailHeaders(emailObj, **keywords) :
 
         yield (headerType, headerTrunc)
 
+def iterReceivedHeadLines(emailObj) :
+    for headerType, headerValueRaw in emailObj.items() :
+        headerValueAndEncoding =  email.header.decode_header(headerValueRaw)
+        headerValue = headerValueAndEncoding[0][0]
+        headerEncoding = headerValueAndEncoding[0][1]
+        if headerType.upper() == 'RECEIVED' :
+            yield headerValue
+
+def parseReceivedValue(receivedValue) :
+    """
+    """
+    line = " ".join(l.strip() for l in receivedValue.split('\n')).strip()
+    regexp = re.compile("from (?P<from>.+) by (?P<by>.+)( with (?P<with>.+)?)( for (?P<for>.+))?; (?P<atString>.+)")
+    m = regexp.match(line)
+    receivedDict =m.groupdict()
+    atString = receivedDict["atString"]
+    try :
+        receivedDict["at"] = parseReceivedAt(atString).isoformat()
+    except Exception :
+        receivedDict["at"] = atString
+    return receivedDict
+
+
+def parseMailDate(dateString) :
+    # f = "%a, %d %b %Y %H:%M:%S %z"
+    # # Python 2.7.10: ValueError: 'z' is a bad directive in format '%a, %d %b %Y %H:%M:%S %z'
+    valueWithoutTZ = " ".join(dateString.split(' ')[:-1])
+    f = "%a, %d %b %Y %H:%M:%S"
+    return datetime.datetime.strptime(valueWithoutTZ, f)
+
+def parseReceivedAt(dateString) :
+    """
+    Doctests::
+
+        >>> parseReceivedAt('Mon, 09 Nov 2015 16:08:10 +0100')
+        foo
+        >>> parseReceivedAt('Mon,  9 Nov 2015 16:08:10 +0100 (CET)')
+    """
+    # f = "%a, %d %b %Y %H:%M:%S %z"
+    # # Python 2.7.10: ValueError: 'z' is a bad directive in format '%a, %d %b %Y %H:%M:%S %z'
+    valueWithoutTZ = dateString[:25]
+    f = "%a, %d %b %Y %H:%M:%S"
+    return datetime.datetime.strptime(valueWithoutTZ, f)
 
 def IsBaseHeader(headerType) :
     """

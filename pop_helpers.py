@@ -27,13 +27,10 @@ def iterMessages(conn, msgList, **keywords) :
     numMessages = msgList # len(M.list()[1])
 
     # order by date
-    reverseFlag = keywords.get('newestFirst', False)
-    if reverseFlag :
-        # newest first
+    newestFirst = keywords.get('newestFirst', False)
+    if newestFirst  :
         msgIterator = reversed(msgList)
-
     else :
-        # oldest first
         msgIterator = msgList
 
     for (sid, msgSize) in msgIterator :
@@ -44,8 +41,5 @@ def iterMessages(conn, msgList, **keywords) :
         octets2 = responseTuple[2]
 
         emailObj = email.message_from_string(rawMail)
-        #
-	#    for headerType, headerValueRaw in email_message.items() :
-        #        headerValueAndEncoding =  email.header.decode_header(headerValueRaw)
-        #yield (sid, rawMail)
-        yield (sid, emailObj)
+
+        yield ("sid.%s" % (sid,), emailObj)

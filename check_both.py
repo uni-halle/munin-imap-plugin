@@ -17,6 +17,8 @@
 
 #---
 #--- Python
+import datetime
+import email.header
 import os
 import socket
 import sys
@@ -84,16 +86,40 @@ def HandleSuccessfulLogin(cli, connImapTriple, connPopTriple) :
 
     # IMAP
     if cli.IsVerbose() :
-        #imap_helpers.printMailboxesWithItemCount(iConn)
-        #imap_helpers.printMailboxesWithLatestMail(iConn)
-        imap_helpers.printMailboxContent(iConn, 'INBOX',
-                                         uniqueIdentifier = True,
-                                         newestFirst = newestFirst)
+        imapValue = printImapMailboxContent(iConn)
 
     # POP
     if cli.IsVerbose() :
-        printPopMailboxContent(pConn, newestFirst = newestFirst)
+        popValue = printPopMailboxContent(pConn)
 
+    for (prot, newestMailObj) in zip(["IMAP", "POP"], [imapValue, popValue]) :
+        dateString = newestMailObj["DATE"]
+        dateValue = mail_helpers.parseMailDate(dateString)
+        subjectString = newestMailObj["SUBJECT"]
+        subjectEncoding = email.header.decode_header(subjectString)
+        subject = subjectEncoding[0][0]
+        fromField = newestMailObj["FROM"]
+        fromAddressWithBracket = email.header.decode_header(fromField)[-1]
+        fromAddress = fromAddressWithBracket[0][1:-1]
+
+        print prot
+        print "  DATE    =", dateValue.isoformat()
+        print "  SUBJECT =", subject
+        print "  FROM    =", fromAddress
+        print "    multipart", newestMailObj.is_multipart()
+        print "    unixfrom", newestMailObj.get_unixfrom()
+        print "    charset", newestMailObj.get_charset()
+        print "    contentType", newestMailObj.get_charset()
+        print "    boundary =", newestMailObj.get_boundary()
+
+        if 1 :
+            for receivedValue in mail_helpers.iterReceivedHeadLines(newestMailObj) :
+                receivedDict = mail_helpers.parseReceivedValue(receivedValue)
+                print "from", receivedDict["from"].split(' ')[0]
+                print "  at", receivedDict["at"]
+                print
+
+        print
 
     theValue = iLoginDelay
     # theValue = iConnectDelayd
@@ -105,7 +131,6 @@ def HandleSuccessfulLogin(cli, connImapTriple, connPopTriple) :
     pConn.quit()
 
     return cli.MapNagiosReturnCode(nagios_stuff.NAGIOS_RC_OK)
-
 
 #---
 #--- Munin-Format
@@ -200,7 +225,7 @@ def GetPopConnection(cli, host, user, password, use_ssl) :
         import socket
         socket.setdefaulttimeout(SOCKET_TIMEOUT_SECONDS)
         if use_ssl:
-            M = poplib.POP3_SSL(host=host) # default port is 995
+            M = poplib.POP3_SSL(host = host) # default port is 995
         else:
     	    M = poplib.POP3(host) # default port is 110
     except Exception as e:
@@ -229,19 +254,55 @@ def GetPopConnection(cli, host, user, password, use_ssl) :
 
     return (M, connectDelay, loginDelay)
 
-def printPopMailboxContent(conn, **keywords) :
+
+def printImapMailboxContent(conn) :
     """
-    @keyword newestFirst: If True sort from newest to oldest. Default is False
-    @type    newestFirst: bool
+    Reads the latest mail via IMAP.
+    """
+
+    mailbox = 'INBOX'
+
+    #imap_helpers.printMailboxesWithItemCount(iConn)
+    #imap_helpers.printMailboxesWithLatestMail(iConn)
+    #imap_helpers.printMailboxContent(iConn, mailbox, **kwargs)
+
+    (okSelect, msgCountList) = conn.select(mailbox, readonly = True)
+    mailboxPretty = imap_helpers.decodeMailboxName(mailbox)
+
+    if 0 :
+        print "%(mailboxPretty)s" % locals()
+    prettyMailbox = imap_helpers.decodeMailboxName(mailbox)
+
+    newestMailObj = None
+    for id, emailObj in imap_helpers.iterMailboxContent(conn, mailbox,
+                                                        uniqueIdentifier = True,
+                                                        newestFirst = True) :
+        if 0 :
+            print "ID = %(id)s" % locals()
+        newestMailObj = emailObj
+        break
+
+    if newestMailObj is None :
+        return None
+
+    return newestMailObj
+
+
+
+
+def printPopMailboxContent(conn) :
+    """
+    Reads the latest mail via POP.
     """
     msgList = pop_helpers.listMessages(conn)
     numMessages = len(msgList)
-    print "There are %i messages (via POP)." % (numMessages,)
-    lastMailObj = None
+    if 0 :
+        print "There are %i messages (via POP)." % (numMessages,)
+    newestMailObj = None
 
-    for (sid, emailObj) in pop_helpers.iterMessages(conn, msgList, **keywords) :
+    for (sid, emailObj) in pop_helpers.iterMessages(conn, msgList, newestFirst = True) :
         if 0 :
-            print "SID = %r" % (sid,)
+            print "ID = %r" % (sid,)
             for headerType, headerTrunc in mail_helpers.iterEmailHeaders(emailObj, truncateAt = 70) :
                 if mail_helpers.IsBaseHeader(headerType) :
                     headerDisplay = mail_helpers.RemoveLineBreaks(headerTrunc)
@@ -249,25 +310,16 @@ def printPopMailboxContent(conn, **keywords) :
             print
 
 
-        lastMailObj = emailObj
+        newestMailObj = emailObj
         break
 
-    # show informatinos of the last (=newest) mail
-    if lastMailObj is not None :
-        print "DATE    =", lastMailObj["DATE"]
-        print "SUBJECT =", lastMailObj["SUBJECT"]
-        print "FROM    =", lastMailObj["FROM"]
-        print "  multipart", lastMailObj.is_multipart()
-        print "  unixfrom", lastMailObj.get_unixfrom()
-        print "  charset", lastMailObj.get_charset()
-        print "  contentType", lastMailObj.get_charset()
-        print "  boundary =", lastMailObj.get_boundary()
-        print
-        pass
+    # show informations of the newest mail
+    if newestMailObj is None :
+        return None
 
     # print all parts of a multipart mail
-    if 0 and lastMailObj is not None :
-        for (i, msg) in enumerate(lastMailObj.get_payload()) :
+    if 0 :
+        for (i, msg) in enumerate(newestMailObj.get_payload()) :
             print "PART", i
             print "  charset =", msg.get_charset()
             print "  contentType =", msg.get_content_type()
@@ -285,6 +337,8 @@ def printPopMailboxContent(conn, **keywords) :
             print
 
         pass
+
+    return newestMailObj
 
 def main():
 
