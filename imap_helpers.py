@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 
+from __future__ import print_function
+from builtins import map
+
 #---
 #--- Python
 import email
@@ -41,12 +44,12 @@ def decodeMailboxName(mbNameEncoded) :
     mbName = mbNameEncoded
     replaceMap = {
         # sorted lexicographically
-        "&APY-" : "ö",
-        "&APw-" : "ü",
+        u"&APY-" : u"ö",
+        u"&APw-" : u"ü",
     }
-    for fromString, toString in replaceMap.iteritems() :
+    for fromString, toString in replaceMap.items() :
         mbName = mbName.replace(fromString, toString)
-    return mbName.decode('utf-8')
+    return mbName # .decode('utf-8')
 
 def iterMailboxContent(conn, mbName, **keywords) :
     """
@@ -100,7 +103,7 @@ def iterMailboxContent_uniqueID(conn, mbName, **keywords) :
     @return: generator[(id, rawMail)]
     """
     # Unique IDs (UID)
-    uidResult, uidData = conn.uid('search', None, "ALL")
+    uidResult, uidData = conn.uid(u'search', None, u"ALL")
     uid_list = uidData[0].split()
 
     # order by date
@@ -111,10 +114,10 @@ def iterMailboxContent_uniqueID(conn, mbName, **keywords) :
         uidIterator = uid_list
 
     for uid in uidIterator :
-        mailResult, mailData = conn.uid('fetch', uid, '(RFC822)')
+        mailResult, mailData = conn.uid(u'fetch', uid, u'(RFC822)')
         rawMail = mailData[0][1]
-        emailObj = email.message_from_string(rawMail)
-        yield ("uid.%s" % (uid,), emailObj)
+        emailObj = email.message_from_string(rawMail.decode('utf-8'))
+        yield (u"uid.%s" % (uid,), emailObj)
         break
 
 
@@ -126,20 +129,20 @@ def printMailboxesWithItemCount(conn) :
     """
     List details for all mailboxes
     """
-    maxNameLen = max([20] + map(len, iterMailboxDisplayNames(conn)))
-    print
+    maxNameLen = max([20] + list(map(len, iterMailboxDisplayNames(conn))))
+    print()
     headFormatString = "  %%-%is | #count | marked | SPECIAL-USE | other attributes" % (maxNameLen,)
     lineFormatString = "  %%(mbDisplayName)-%is | %%(msgCount)5s  | %%(markerString)6s | %%(specialUse)-11s | %%(attributeString)s " % (maxNameLen,)
-    print headFormatString % ("Mailbox",)
-    print "  %s-+--------+--------+-%s-+-%s" % ("-"*20,"-"*11,"-"*20)
+    print(headFormatString % ("Mailbox",))
+    print("  %s-+--------+--------+-%s-+-%s" % ("-"*20,"-"*11,"-"*20))
     for mbNameEncoded, markers in iterMailboxNames(conn) :
         mbDisplayName = decodeMailboxName(mbNameEncoded)
         (Okselect, msgCountList) = conn.select(mbNameEncoded, readonly = True)
 
-        isMarked = '\marked' in markers
+        isMarked = '\\marked' in markers
         markerString = "MARKED" if isMarked else "  NO  "
         attributeSet = set(markers)
-        markerSet = set(['\marked', '\unmarked'])
+        markerSet = set(['\\marked', '\\unmarked'])
         for an in markerSet :
             attributeSet.discard(an)
 
@@ -161,8 +164,8 @@ def printMailboxesWithItemCount(conn) :
         attributeString = ", ".join(("'%s'" % an for an in sorted(attributeSet)))
         msgCount = msgCountList[0]
 
-	if 0 :
-	    acl = M.myrights(mbNameEncoded) # works only with ACL
+        if 0 :
+            acl = M.myrights(mbNameEncoded) # works only with ACL
 
         if 0 :
             quotaRoots = M.getquotaroot(mbNameEncoded) # works only with QUOTA
@@ -170,12 +173,12 @@ def printMailboxesWithItemCount(conn) :
         if 0 :
             # deaktiviert, da bei gmx.net folgender Fehler kam:
             # imaplib.error: command CHECK illegal in state AUTH,
-	    # only allowed in states SELECTED
+            # only allowed in states SELECTED
             (okCheck, checkResultList) = conn.check()
             checkResult = checkResultList[0]
             pass
 
-        print lineFormatString % locals()
+        print(lineFormatString % locals())
 
 
 def printMailboxesWithLatestMail(conn, **keywords) :
@@ -204,19 +207,19 @@ def printMailboxContent(conn, mailbox, **keywords) :
     (okSelect, msgCountList) = conn.select(mailbox, readonly = True)
     mailboxPretty = decodeMailboxName(mailbox)
 
-    print "%(mailboxPretty)s" % locals()
+    print("%(mailboxPretty)s" % locals())
     prettyMailbox = decodeMailboxName(mailbox)
 
     for id, emailObj in iterMailboxContent(conn, mailbox, **keywords) :
-        print "ID = %(id)s" % locals()
+        print("ID = %(id)s" % locals())
 
         #emailTo = emailObj['To']
         #emailFrom = email.utils.parseaddr(emailObj['From'])
 
-	for headerType, headerTrunc in mail_helpers.iterEmailHeaders(emailObj, truncateAt = 70) :
+        for headerType, headerTrunc in mail_helpers.iterEmailHeaders(emailObj, truncateAt = 70) :
             if mail_helpers.IsBaseHeader(headerType) :
                 headerDisplay = mail_helpers.RemoveLineBreaks(headerTrunc)
-                print "    %-30s %s" % (headerType, headerDisplay,)
+                print("    %-30s %s" % (headerType, headerDisplay,))
                 pass
             continue
 
@@ -233,7 +236,7 @@ def printMailboxContent(conn, mailbox, **keywords) :
                 elif maintype == 'text':
                     return email_message_instance.get_payload()
 
-            print
+            print()
 
 
 
@@ -345,13 +348,13 @@ def printCapabilities(conn, capabilities) :
     # https://www.novell.com/documentation/groupwise_sdk/gwsdk_gwimap/data/al7te9j.html
     capabilitiesOfInterest.add('XGWEXTENSIONS')
 
-    print
-    print "  %-29s | supported " % ("Capabilities",)
-    print "  %s-+-----------" % ("-"*29,)
+    print()
+    print("  %-29s | supported " % ("Capabilities",))
+    print("  %s-+-----------" % ("-"*29,))
 
     for capName in sorted(capabilitiesOfInterest) :
         supported = capName in capabilities
-        print "  %-29s | %s" % (capName, "%s" % ('SUPPORTED' if supported else 'NO'))
+        print("  %-29s | %s" % (capName, "%s" % ('SUPPORTED' if supported else 'NO')))
 
 #    for xcapName in sorted(capabilitiesOfInterest) :
 #        if xcapName.startswith('X') :

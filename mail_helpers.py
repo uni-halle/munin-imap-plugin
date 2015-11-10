@@ -22,7 +22,7 @@ def iterEmailHeaders(emailObj, **keywords) :
     truncateAt = keywords.get('truncateAt', 0)
     ELLIPSIS = keywords.get('ellipsis', "...")
     ELLIPSIS_LEN  = len(ELLIPSIS)
-    for headerType, headerValueRaw in emailObj.items() :
+    for headerType, headerValueRaw in list(emailObj.items()) :
         headerValueAndEncoding =  email.header.decode_header(headerValueRaw)
         headerValue = headerValueAndEncoding[0][0]
         headerEncoding = headerValueAndEncoding[0][1]
@@ -39,7 +39,7 @@ def iterEmailHeaders(emailObj, **keywords) :
         yield (headerType, headerTrunc)
 
 def iterReceivedHeadLines(emailObj) :
-    for headerType, headerValueRaw in emailObj.items() :
+    for headerType, headerValueRaw in list(emailObj.items()) :
         headerValueAndEncoding =  email.header.decode_header(headerValueRaw)
         headerValue = headerValueAndEncoding[0][0]
         headerEncoding = headerValueAndEncoding[0][1]

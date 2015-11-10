@@ -15,6 +15,9 @@
 # warranty of merchantability or fitness for a particular purpose.
 # See "LICENSE.GPL" in the source distribution for more information.
 
+from __future__ import print_function
+from builtins import zip
+
 #---
 #--- Python
 import datetime
@@ -106,7 +109,7 @@ def HandleSuccessfulLogin(cli, connImapTriple, connPopTriple) :
                 smtpServer, smtpPort,
                 smtpUser, smtpPassword] :
         # Testmail kann nicht versandt werden
-        print >>sys.stderr, "SMTP credentials incomplete."
+        print("SMTP credentials incomplete.", file=sys.stderr)
         sys.exit(1)
         return
 
@@ -126,7 +129,9 @@ def HandleSuccessfulLogin(cli, connImapTriple, connPopTriple) :
 
     mailDict = {}
     for (prot, newestMailObj) in zip(["imap", "pop"], [imapValue, popValue]) :
+        #print(newestMailObj.as_string())
         dateString = newestMailObj["DATE"]
+        #print(repr(dateString))
         dateValue = mail_helpers.parseMailDate(dateString)
         subjectString = newestMailObj["SUBJECT"]
         subjectEncoding = email.header.decode_header(subjectString)
@@ -137,7 +142,7 @@ def HandleSuccessfulLogin(cli, connImapTriple, connPopTriple) :
         try :
             timestamp = decomposeSubjectLine(subject)
         except Exception as E :
-            print >>sys.stderr, "Exception while decomposing subject line: %s" % (E,)
+            print("Exception while decomposing subject line: %s" % (E,), file=sys.stderr)
             sys.exit(5)
             return
 
@@ -149,40 +154,40 @@ def HandleSuccessfulLogin(cli, connImapTriple, connPopTriple) :
         }
 
         if 0 :
-            print prot
-            print "  DATE    =", dateValue.isoformat()
-            print "  SUBJECT =", subject
-            print "  FROM    =", fromAddress
+            print(prot)
+            print("  DATE    =", dateValue.isoformat())
+            print("  SUBJECT =", subject)
+            print("  FROM    =", fromAddress)
 
         if 0 :
-            print "    multipart", newestMailObj.is_multipart()
-            print "    unixfrom", newestMailObj.get_unixfrom()
-            print "    charset", newestMailObj.get_charset()
-            print "    contentType", newestMailObj.get_charset()
-            print "    boundary =", newestMailObj.get_boundary()
+            print("    multipart", newestMailObj.is_multipart())
+            print("    unixfrom", newestMailObj.get_unixfrom())
+            print("    charset", newestMailObj.get_charset())
+            print("    contentType", newestMailObj.get_charset())
+            print("    boundary =", newestMailObj.get_boundary())
 
         if 0 :
             for receivedValue in mail_helpers.iterReceivedHeadLines(newestMailObj) :
                 receivedDict = mail_helpers.parseReceivedValue(receivedValue)
-                print "from", receivedDict["from"].split(' ')[0]
-                print "  at", receivedDict["at"]
-                print
+                print("from", receivedDict["from"].split(' ')[0])
+                print("  at", receivedDict["at"])
+                print()
 
-        print
+        print()
 
     latestSmtp = now
     latestImap = mailDict["imap"]["timestamp"]
     latestPop = mailDict["pop"]["timestamp"]
     if None in [latestImap, latestPop] :
         impSeconds = 0
-        print >>sys.stderr, "Missing either POP or IMAP value."
+        print("Missing either POP or IMAP value.", file=sys.stderr)
         sys.exit(4)
         return
 
     impTimeDelta = latestImap - latestPop
     impSeconds = timedelta2seconds(impTimeDelta)
-    print "imapSeconds =", timedelta2seconds(latestImap - now)
-    print "popSeconds =", timedelta2seconds(latestPop - now)
+    print("imapSeconds =", timedelta2seconds(latestImap - now))
+    print("popSeconds =", timedelta2seconds(latestPop - now))
 
     if 0 :
         import pprint
@@ -222,7 +227,7 @@ def HandleMeasureCommand(cli, theValue) :
     @rtype:  int
     """
     variableName = getMuninVariableName(cli)
-    print "%(variableName)s.value %(theValue).2f" % locals()
+    print("%(variableName)s.value %(theValue).2f" % locals())
 
 
 def HandleConfigCommand(cli) :
@@ -240,20 +245,20 @@ def HandleConfigCommand(cli) :
     lowerLimit = munin_helpers.MUNIN_VALUE_MINIMUM
 
     if 0 : # single graph plugin
-        print "graph_title %(graphTitle)s" % locals()
-        print "graph_vlabel %(graphLabel)s" % locals()
+        print("graph_title %(graphTitle)s" % locals())
+        print("graph_vlabel %(graphLabel)s" % locals())
         if 1 :
-            print "graph_args --base 1000 --lower-limit %(lowerLimit)f" % locals()
-            print "graph_scale no"
+            print("graph_args --base 1000 --lower-limit %(lowerLimit)f" % locals())
+            print("graph_scale no")
 
         if 0 :
-            print "%(variableName)s.warning 10" % locals()
-            print "%(variableName)s.critical 120" % locals()
+            print("%(variableName)s.warning 10" % locals())
+            print("%(variableName)s.critical 120" % locals())
 
-        print "%(variableName)s.label %(graphLabel)s" % locals()
+        print("%(variableName)s.label %(graphLabel)s" % locals())
 
     else : # multigraph plugin
-        print """multigraph if_bytes
+        print("""multigraph if_bytes
 graph_title $host interface traffic
 graph_order recv send
 graph_args --base 1000
@@ -291,8 +296,7 @@ send.label bps
 send.type DERIVE
 send.negative recv
 send.cdef send,8,*
-send.min 0
-"""
+send.min 0""")
 
     return 0
 
@@ -389,7 +393,7 @@ def printImapMailboxContent(conn) :
     mailboxPretty = imap_helpers.decodeMailboxName(mailbox)
 
     if 0 :
-        print "%(mailboxPretty)s" % locals()
+        print("%(mailboxPretty)s" % locals())
     prettyMailbox = imap_helpers.decodeMailboxName(mailbox)
 
     newestMailObj = None
@@ -397,12 +401,12 @@ def printImapMailboxContent(conn) :
                                                         uniqueIdentifier = True,
                                                         newestFirst = True) :
         if 0 :
-            print "ID = %(id)s" % locals()
+            print("ID = %(id)s" % locals())
         newestMailObj = emailObj
         break
 
     if newestMailObj is None :
-        print >>sys.stderr, "Could not access IMAP server."
+        print("Could not access IMAP server.", file=sys.stderr)
         sys.exit(3)
         return None
 
@@ -418,17 +422,17 @@ def printPopMailboxContent(conn) :
     msgList = pop_helpers.listMessages(conn)
     numMessages = len(msgList)
     if 0 :
-        print "There are %i messages (via POP)." % (numMessages,)
+        print("There are %i messages (via POP)." % (numMessages,))
     newestMailObj = None
 
     for (sid, emailObj) in pop_helpers.iterMessages(conn, msgList, newestFirst = True) :
         if 0 :
-            print "ID = %r" % (sid,)
+            print("ID = %r" % (sid,))
             for headerType, headerTrunc in mail_helpers.iterEmailHeaders(emailObj, truncateAt = 70) :
                 if mail_helpers.IsBaseHeader(headerType) :
                     headerDisplay = mail_helpers.RemoveLineBreaks(headerTrunc)
-                    print "    %-30s %s" % (headerType, headerDisplay,)
-            print
+                    print("    %-30s %s" % (headerType, headerDisplay,))
+            print()
 
 
         newestMailObj = emailObj
@@ -436,28 +440,28 @@ def printPopMailboxContent(conn) :
 
     # show informations of the newest mail
     if newestMailObj is None :
-        print >>sys.stderr, "Could not access POP server."
+        print("Could not access POP server.", file=sys.stderr)
         sys.exit(2)
         return None
 
     # print all parts of a multipart mail
     if 0 :
         for (i, msg) in enumerate(newestMailObj.get_payload()) :
-            print "PART", i
-            print "  charset =", msg.get_charset()
-            print "  contentType =", msg.get_content_type()
-            print "  contentMainType =", msg.get_content_maintype()
-            print "  contentSubType =", msg.get_content_subtype()
-            print "  defaultType =", msg.get_default_type()
-            print "  filename =", msg.get_filename()
-            print "  boundary =", msg.get_boundary()
-            print "  contentCharset =", msg.get_content_charset()
-            print "  charsets =", msg.get_charsets()
-            print
-            print "  <CONTENT>"
-            print msg.as_string()
-            print "  </CONTENT>"
-            print
+            print("PART", i)
+            print("  charset =", msg.get_charset())
+            print("  contentType =", msg.get_content_type())
+            print("  contentMainType =", msg.get_content_maintype())
+            print("  contentSubType =", msg.get_content_subtype())
+            print("  defaultType =", msg.get_default_type())
+            print("  filename =", msg.get_filename())
+            print("  boundary =", msg.get_boundary())
+            print("  contentCharset =", msg.get_content_charset())
+            print("  charsets =", msg.get_charsets())
+            print()
+            print("  <CONTENT>")
+            print(msg.as_string())
+            print("  </CONTENT>")
+            print()
 
         pass
 

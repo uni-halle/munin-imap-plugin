@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 
+from __future__ import print_function
+from builtins import object
+
 #---
 #--- Python
 import optparse # von Python 2.3 bis Python 2.6 (usage 'argparse' from Python 2.7 on)
@@ -16,19 +19,19 @@ class BaseCLI(object) :
     _SINGLETON_INSTANCE = None #: Singleton Pattern
 
     def __init__(self, **keywords) :
-	"""
-	@keyword usernameVar, passwordVar: Name of the
-	    environment variables holding the user credentials and the
-	    hostname of the service under test.
-	@type    usernameVar, passwordVar: str
+        """
+        @keyword usernameVar, passwordVar: Name of the
+            environment variables holding the user credentials and the
+            hostname of the service under test.
+        @type    usernameVar, passwordVar: str
 
         @keyword hostname: default value for server hostname
         @type    hostname: str
-	"""
+        """
 
-	# Names of some environment variables
-	self._ENV_NAME_USER = keywords.get('usernameVar', None)
-	self._ENV_NAME_PASS = keywords.get('passwordVar', None)
+        # Names of some environment variables
+        self._ENV_NAME_USER = keywords.get('usernameVar', None)
+        self._ENV_NAME_PASS = keywords.get('passwordVar', None)
 
         self._options = None
         self._args = None
@@ -77,15 +80,15 @@ class BaseCLI(object) :
 
     @classmethod
     def GetInstance(cls, **keywords) :
-	"""
-	@keyword usernameVar, passwordVar: Name of the
-	    environment variables holding the user credentials and the
-	    hostname of the service under test.
-	@type    usernameVar, passwordVar: str
+        """
+        @keyword usernameVar, passwordVar: Name of the
+            environment variables holding the user credentials and the
+            hostname of the service under test.
+        @type    usernameVar, passwordVar: str
 
         @keyword hostname: default value for server hostname
         @type    hostname: str
-	"""
+        """
         if cls._SINGLETON_INSTANCE is None :
             cls._SINGLETON_INSTANCE = cls(**keywords)
         return cls._SINGLETON_INSTANCE
@@ -158,7 +161,7 @@ class BaseCLI(object) :
         self._options = options
 
         if 0 :
-            print "'%s' with '%s' -> '%s'" % (self.user, self.password, self.host)
+            print("'%s' with '%s' -> '%s'" % (self.user, self.password, self.host))
 
 
 def HandleInvalidArguments(cli, E) :
@@ -173,7 +176,7 @@ def HandleInvalidArguments(cli, E) :
     @rtype:  int
     """
     if 1 :
-        print E
+        print(E)
     cli.printUsage()
     return cli.MapNagiosReturnCode(nagios_stuff.NAGIOS_RC_UNKNOWN)
 
@@ -195,7 +198,7 @@ def HandleCannotConnectError(cli, handleMeasureCommand, explanation) :
     handleMeasureCommand(cli, munin_helpers.MUNIN_VALUE_CANNOT_CONNECT)
     if 0 :
         host = cli.GetHostname()
-        print explanation
+        print(explanation)
     return nagios_stuff.NAGIOS_RC_CRITICAL
 
 
@@ -205,8 +208,8 @@ def HandleCannotLoginError(cli, handleMeasureCommand, explanation) :
     @rtype:  int
     """
     if 1 :
-        print cli.getLoginString()
+        print(cli.getLoginString())
     handleMeasureCommand(cli, munin_helpers.MUNIN_VALUE_CANNOT_LOGIN)
     if 0  :
-        print explanation
+        print(explanation)
     return nagios_stuff.NAGIOS_RC_CRITICAL
