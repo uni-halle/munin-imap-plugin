@@ -63,24 +63,39 @@ def parseReceivedValue(receivedValue) :
 
 def parseMailDate(dateString) :
     # f = "%a, %d %b %Y %H:%M:%S %z"
-    # # Python 2.7.10: ValueError: 'z' is a bad directive in format '%a, %d %b %Y %H:%M:%S %z'
+    # # Python 2.7.10: ValueError: 'z' is a bad directive
+    # in format '%a, %d %b %Y %H:%M:%S %z'
     valueWithoutTZ = " ".join(dateString.split(' ')[:-1])
     f = "%a, %d %b %Y %H:%M:%S"
     return datetime.datetime.strptime(valueWithoutTZ, f)
+
 
 def parseReceivedAt(dateString) :
     """
     Doctests::
 
         >>> parseReceivedAt('Mon, 09 Nov 2015 16:08:10 +0100')
-        foo
+        datetime.datetime(2015, 11, 9, 16, 8, 10)
         >>> parseReceivedAt('Mon,  9 Nov 2015 16:08:10 +0100 (CET)')
+        datetime.datetime(2015, 11, 9, 16, 8, 10)
+
     """
     # f = "%a, %d %b %Y %H:%M:%S %z"
-    # # Python 2.7.10: ValueError: 'z' is a bad directive in format '%a, %d %b %Y %H:%M:%S %z'
+    # # Python 2.7.10: ValueError: 'z' is a bad directive
+    # in format '%a, %d %b %Y %H:%M:%S %z'
     valueWithoutTZ = dateString[:25]
     f = "%a, %d %b %Y %H:%M:%S"
     return datetime.datetime.strptime(valueWithoutTZ, f)
+
+
+def getFromAddress(fromField) :
+    fromAddressMaybeWithBracket = email.header.decode_header(fromField)[-1][0]
+    if fromAddressMaybeWithBracket.startswith('<') :
+        fromAddress = fromAddressMaybeWithBracket[1:-1]
+    else :
+        fromAddress = fromAddressMaybeWithBracket
+    return fromAddress
+
 
 def IsBaseHeader(headerType) :
     """
@@ -97,3 +112,7 @@ def IsBaseHeader(headerType) :
 
 def RemoveLineBreaks(headerTrunc) :
     return headerTrunc.replace('\n', ' ').replace('\r', ' ').replace('  ', ' ')
+
+if __name__ == "__main__" :
+    import doctest
+    doctest.testmod()

@@ -18,7 +18,6 @@
 #---
 #--- Python
 import datetime
-import email.header
 import os
 import socket
 import sys
@@ -26,8 +25,11 @@ import time
 
 #---
 #--- Python (Mail)
+from email.mime.text import MIMEText
+import email.header
 import imaplib
 import poplib
+import smtplib
 
 #---
 #--- Plugin Stuff
@@ -67,6 +69,12 @@ class CLI(cli_helpers.BaseCLI) :
         return nagiosReturnCode
 
 
+def timedelta2seconds(td) :
+    SECONDS_PER_DAY = 24 * 3600
+    seconds = td.seconds + td.days * SECONDS_PER_DAY
+    return seconds
+
+
 def HandleSuccessfulLogin(cli, connImapTriple, connPopTriple) :
     """
     @param connImapTriple: (conn, connectDelay, loginDelay) the IMAP connection
@@ -84,6 +92,30 @@ def HandleSuccessfulLogin(cli, connImapTriple, connPopTriple) :
 
     newestFirst = True
 
+    now = datetime.datetime.now()
+    latestSmtp = None
+
+    # SMTP
+    toAddress = os.environ.get('RECEIVING_ADDRESS', None)
+    fromAddress = os.environ.get('SENDING_ADDRESS', None)
+    smtpServer = os.environ.get('SMTP_HOST', None)
+    smtpPort = os.environ.get('SMTP_PORT', 25)
+    smtpUser = os.environ.get('SENDING_USERNAME', None)
+    smtpPassword = os.environ.get('SENDING_PASSWORD', None)
+    if None in [toAddress, fromAddress,
+                smtpServer, smtpPort,
+                smtpUser, smtpPassword] :
+        # Testmail kann nicht versandt werden
+        print >>sys.stderr, "SMTP credentials incomplete."
+        sys.exit(1)
+        return
+
+    if 0 :
+        sendTestMessageWithTimestamp(toAddress, fromAddress,
+                                     smtpServer, smtpPort,
+                                     smtpUser, smtpPassword, now)
+        latestSmtp = now
+
     # IMAP
     if cli.IsVerbose() :
         imapValue = printImapMailboxContent(iConn)
@@ -92,27 +124,44 @@ def HandleSuccessfulLogin(cli, connImapTriple, connPopTriple) :
     if cli.IsVerbose() :
         popValue = printPopMailboxContent(pConn)
 
-    for (prot, newestMailObj) in zip(["IMAP", "POP"], [imapValue, popValue]) :
+    mailDict = {}
+    for (prot, newestMailObj) in zip(["imap", "pop"], [imapValue, popValue]) :
         dateString = newestMailObj["DATE"]
         dateValue = mail_helpers.parseMailDate(dateString)
         subjectString = newestMailObj["SUBJECT"]
         subjectEncoding = email.header.decode_header(subjectString)
         subject = subjectEncoding[0][0]
         fromField = newestMailObj["FROM"]
-        fromAddressWithBracket = email.header.decode_header(fromField)[-1]
-        fromAddress = fromAddressWithBracket[0][1:-1]
+        fromAddress = mail_helpers.getFromAddress(fromField)
 
-        print prot
-        print "  DATE    =", dateValue.isoformat()
-        print "  SUBJECT =", subject
-        print "  FROM    =", fromAddress
-        print "    multipart", newestMailObj.is_multipart()
-        print "    unixfrom", newestMailObj.get_unixfrom()
-        print "    charset", newestMailObj.get_charset()
-        print "    contentType", newestMailObj.get_charset()
-        print "    boundary =", newestMailObj.get_boundary()
+        try :
+            timestamp = decomposeSubjectLine(subject)
+        except Exception as E :
+            print >>sys.stderr, "Exception while decomposing subject line: %s" % (E,)
+            sys.exit(5)
+            return
 
-        if 1 :
+        mailDict[prot] = {
+            "date" : dateValue.isoformat(),
+            "subject" : subject,
+            "from" : fromAddress,
+            "timestamp" : timestamp,
+        }
+
+        if 0 :
+            print prot
+            print "  DATE    =", dateValue.isoformat()
+            print "  SUBJECT =", subject
+            print "  FROM    =", fromAddress
+
+        if 0 :
+            print "    multipart", newestMailObj.is_multipart()
+            print "    unixfrom", newestMailObj.get_unixfrom()
+            print "    charset", newestMailObj.get_charset()
+            print "    contentType", newestMailObj.get_charset()
+            print "    boundary =", newestMailObj.get_boundary()
+
+        if 0 :
             for receivedValue in mail_helpers.iterReceivedHeadLines(newestMailObj) :
                 receivedDict = mail_helpers.parseReceivedValue(receivedValue)
                 print "from", receivedDict["from"].split(' ')[0]
@@ -121,8 +170,30 @@ def HandleSuccessfulLogin(cli, connImapTriple, connPopTriple) :
 
         print
 
-    theValue = iLoginDelay
+    latestSmtp = now
+    latestImap = mailDict["imap"]["timestamp"]
+    latestPop = mailDict["pop"]["timestamp"]
+    if None in [latestImap, latestPop] :
+        impSeconds = 0
+        print >>sys.stderr, "Missing either POP or IMAP value."
+        sys.exit(4)
+        return
+
+    impTimeDelta = latestImap - latestPop
+    impSeconds = timedelta2seconds(impTimeDelta)
+    print "imapSeconds =", timedelta2seconds(latestImap - now)
+    print "popSeconds =", timedelta2seconds(latestPop - now)
+
+    if 0 :
+        import pprint
+        pprint.pprint(mailDict)
+
+    # see the following website for Multigraph Plugins
+    # http://guide.munin-monitoring.org/en/latest/plugin/multigraphing.html
+
+    # theValue = iLoginDelay
     # theValue = iConnectDelayd
+    theValue = impSeconds
 
     HandleMeasureCommand(cli, theValue)
 
@@ -156,6 +227,10 @@ def HandleMeasureCommand(cli, theValue) :
 
 def HandleConfigCommand(cli) :
     """
+    For development of a Multigraph Plugin see:
+
+        - http://guide.munin-monitoring.org/en/latest/plugin/multigraphing.html#plugin-multigraphing
+
     @return: final exit code
     @rtype:  int
     """
@@ -164,17 +239,61 @@ def HandleConfigCommand(cli) :
     variableName = getMuninVariableName(cli)
     lowerLimit = munin_helpers.MUNIN_VALUE_MINIMUM
 
-    print "graph_title %(graphTitle)s" % locals()
-    print "graph_vlabel %(graphLabel)s" % locals()
-    if 1 :
-        print "graph_args --base 1000 --lower-limit %(lowerLimit)f" % locals()
-        print "graph_scale no"
+    if 0 : # single graph plugin
+        print "graph_title %(graphTitle)s" % locals()
+        print "graph_vlabel %(graphLabel)s" % locals()
+        if 1 :
+            print "graph_args --base 1000 --lower-limit %(lowerLimit)f" % locals()
+            print "graph_scale no"
 
-    if 0 :
-        print "%(variableName)s.warning 10" % locals()
-        print "%(variableName)s.critical 120" % locals()
+        if 0 :
+            print "%(variableName)s.warning 10" % locals()
+            print "%(variableName)s.critical 120" % locals()
 
-    print "%(variableName)s.label %(graphLabel)s" % locals()
+        print "%(variableName)s.label %(graphLabel)s" % locals()
+
+    else : # multigraph plugin
+        print """multigraph if_bytes
+graph_title $host interface traffic
+graph_order recv send
+graph_args --base 1000
+graph_vlabel bits in (-) / out (+) per \${graph_period}
+graph_category network
+graph_info This graph shows the total traffic for $host
+
+send.info Bits sent/received by $host
+recv.label recv
+recv.type DERIVE
+recv.graph no
+recv.cdef recv,8,*
+recv.min 0
+send.label bps
+send.type DERIVE
+send.negative recv
+send.cdef send,8,*
+send.min 0
+
+multigraph if_errors
+graph_title $host interface errors
+graph_order recv send
+graph_args --base 1000
+graph_vlabel errors in (-) / out (+) per \${graph_period}
+graph_category network
+graph_info This graph shows the total errors for $host
+
+send.info Errors in outgoing/incoming traffic on $host
+recv.label recv
+recv.type DERIVE
+recv.graph no
+recv.cdef recv,8,*
+recv.min 0
+send.label bps
+send.type DERIVE
+send.negative recv
+send.cdef send,8,*
+send.min 0
+"""
+
     return 0
 
 def GetImapConnection(cli, host, user, password, use_ssl) :
@@ -283,6 +402,8 @@ def printImapMailboxContent(conn) :
         break
 
     if newestMailObj is None :
+        print >>sys.stderr, "Could not access IMAP server."
+        sys.exit(3)
         return None
 
     return newestMailObj
@@ -315,6 +436,8 @@ def printPopMailboxContent(conn) :
 
     # show informations of the newest mail
     if newestMailObj is None :
+        print >>sys.stderr, "Could not access POP server."
+        sys.exit(2)
         return None
 
     # print all parts of a multipart mail
@@ -339,6 +462,65 @@ def printPopMailboxContent(conn) :
         pass
 
     return newestMailObj
+
+SUBJECT_PREFIX = "Testmessage "
+
+def composeSubjectLine(now) :
+    """
+    @param now: the current timestamp
+    @type  now: datetime.datetime
+    """
+    timestamp = now.isoformat()
+    return "%s%s" % (SUBJECT_PREFIX, timestamp)
+
+
+def decomposeSubjectLine(subjectLine) :
+    """
+    @param subject: content of the subject field
+    @type  subject: str
+
+    @raise ValueError: on bad formatted subject line
+
+    @rtype: datetime.datetime
+    """
+    timestamp = subjectLine[len(SUBJECT_PREFIX):]
+    formatString = "%Y-%m-%dT%H:%M:%S.%f"
+    ts = datetime.datetime.strptime(timestamp, formatString)
+    return ts
+
+
+def sendTestMessageWithTimestamp(toAddress, fromAddress,
+                                 smtpServer, smtpPort,
+                                 smtpUser, smtpPassword,
+                                 now) :
+    """
+    @param toAddress, fromAddress: sender and receiver
+    @type  toAddress, fromAddress: str
+
+    @param smtpServer: hostname of the SMTP server
+    @type  smtpServer: str
+
+    @param smtpPort: port of the SMTP server
+    @type  smtpPort: int
+
+    @param smtpUser, smtpPassword: user credential for authenticated sending
+        (transmittet without SSL but with STARTTLS)
+    @type  smtpUser, smtpPassword: str
+
+    @param now: the current timestamp
+    @type  now: datetime.datetime
+    """
+    msg = MIMEText("This is an automatic generated test message.\n\nPlease contact david-lukas.mueller@itz.uni-halle.de for details.")
+    msg['Subject'] = composeSubjectLine(now)
+    msg['From'] = fromAddress
+    msg['To'] = toAddress
+
+    s = smtplib.SMTP(smtpServer, smtpPort)
+    s.starttls() # (220, 'OK')
+    s.login(smtpUser, smtpPassword) # (235, 'Authentication succeeded')
+    s.sendmail(fromAddress, [toAddress], msg.as_string())
+    s.quit()
+    return
 
 def main():
 
