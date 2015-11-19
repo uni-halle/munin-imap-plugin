@@ -113,7 +113,7 @@ def HandleSuccessfulLogin(cli, connImapTriple, connPopTriple) :
         sys.exit(1)
         return
 
-    if 0 :
+    if 1 :
         sendTestMessageWithTimestamp(toAddress, fromAddress,
                                      smtpServer, smtpPort,
                                      smtpUser, smtpPassword, now)
@@ -171,9 +171,9 @@ def HandleSuccessfulLogin(cli, connImapTriple, connPopTriple) :
                 receivedDict = mail_helpers.parseReceivedValue(receivedValue)
                 print("from", receivedDict["from"].split(' ')[0])
                 print("  at", receivedDict["at"])
-                print()
+                print() # emtpy line
 
-        print()
+            print() # empty line
 
     latestSmtp = now
     latestImap = mailDict["imap"]["timestamp"]
@@ -184,10 +184,12 @@ def HandleSuccessfulLogin(cli, connImapTriple, connPopTriple) :
         sys.exit(4)
         return
 
-    impTimeDelta = latestImap - latestPop
-    impSeconds = timedelta2seconds(impTimeDelta)
-    print("imapSeconds =", timedelta2seconds(latestImap - now))
-    print("popSeconds =", timedelta2seconds(latestPop - now))
+    deltaTimeDelta = latestImap - latestPop
+    deltaSeconds = timedelta2seconds(deltaTimeDelta)
+    verbose = 0
+    if verbose :
+        print("imapSeconds =", timedelta2seconds(latestImap - now))
+        print("popSeconds =", timedelta2seconds(latestPop - now))
 
     if 0 :
         import pprint
@@ -198,11 +200,11 @@ def HandleSuccessfulLogin(cli, connImapTriple, connPopTriple) :
 
     # theValue = iLoginDelay
     # theValue = iConnectDelayd
-    theValue = impSeconds
+    theValue = deltaSeconds
 
-    HandleMeasureCommand(cli, theValue)
+    HandleMeasureCommand(cli, theValue + 10.0)
 
-    # logout
+    # Logout
     iConn.logout()
     pConn.quit()
 
@@ -244,7 +246,7 @@ def HandleConfigCommand(cli) :
     variableName = getMuninVariableName(cli)
     lowerLimit = munin_helpers.MUNIN_VALUE_MINIMUM
 
-    if 0 : # single graph plugin
+    if 1 : # single graph plugin
         print("graph_title %(graphTitle)s" % locals())
         print("graph_vlabel %(graphLabel)s" % locals())
         if 1 :
@@ -432,7 +434,7 @@ def printPopMailboxContent(conn) :
                 if mail_helpers.IsBaseHeader(headerType) :
                     headerDisplay = mail_helpers.RemoveLineBreaks(headerTrunc)
                     print("    %-30s %s" % (headerType, headerDisplay,))
-            print()
+            print() # empty line
 
 
         newestMailObj = emailObj
